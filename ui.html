@@ -116,18 +116,20 @@
   textarea { padding: 8px 9px; min-height: 120px; resize: vertical; line-height: 1.5; }
 
   .owner { display: grid; grid-template-columns: 82px 1fr; align-items: start; gap: 8px; margin-bottom: 6px; }
-  .owner span { padding-top: 7px; color: var(--figma-color-text-secondary); }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; min-height: 32px; cursor: text; }
+  .owner > span { padding-top: 7px; color: var(--figma-color-text-secondary); }
+  .chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px; min-height: 32px; cursor: text; }
   .chip {
-    display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 8px; border-radius: 6px;
-    background: var(--accent-soft); font-weight: 500;
+    display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 3px 0 8px; border-radius: 6px;
+    background: var(--accent-soft); font-weight: 500; line-height: 1;
   }
+  .chip span { display: block; line-height: 16px; white-space: nowrap; }
   .chip button {
-    width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; cursor: pointer; background: none;
+    flex: none; width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; cursor: pointer; background: none;
     color: var(--figma-color-text-secondary); display: grid; place-items: center;
   }
+  .chip button svg { display: block; }
   .chip button:hover { background: var(--figma-color-bg-hover); color: var(--figma-color-text); }
-  .chips input { flex: 1; min-width: 80px; border: 0; outline: none; background: none; padding: 3px 4px; }
+  .chips input { flex: 1; min-width: 80px; height: 22px; border: 0; outline: none; background: none; padding: 0 4px; }
 
   .link-row { display: flex; gap: 4px; margin-bottom: 6px; }
   .link-row .input { flex: 1; }
@@ -386,7 +388,9 @@
     </div>
   </footer>
 
-  <datalist id="people"></datalist>
+  <datalist id="people-design"></datalist>
+  <datalist id="people-dev"></datalist>
+  <datalist id="people-product"></datalist>
 
   <div class="confirm" id="confirm">
     <div class="box">
@@ -448,7 +452,7 @@
   </div>
 
 <script>
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const VERSION_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/version.json';
 
 const STRINGS = {
@@ -464,7 +468,7 @@ const STRINGS = {
     noSpec: 'No spec yet', status: 'Status', wip: 'In progress', review: 'In review', ready: 'Ready for dev',
     statusLong: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
     owners: 'Owners', design: 'Design', dev: 'Development', product: 'Product',
-    ownersHint: 'Type a name and press Enter. Suggestions include people in this file and names you used before.',
+    ownersHint: 'Type a name and press Enter. Suggestions come from the team list, owners used in this file and names you used before.',
     jira: 'Jira links', slack: 'Slack threads', addJira: '+ Add Jira link', addSlack: '+ Add Slack thread',
     notes: 'Notes', notesPh: 'Anything developers (and Claude) should know: behaviour, interactions, rules, edge cases, decisions…',
     create: 'Add spec card', save: 'Save changes', saved: 'Saved', remove: 'Remove',
@@ -504,7 +508,7 @@ const STRINGS = {
     noSpec: 'Henüz spec yok', status: 'Durum', wip: 'Devam ediyor', review: 'İncelemede', ready: 'Dev’e hazır',
     statusLong: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
     owners: 'Sorumlular', design: 'Design', dev: 'Development', product: 'Product',
-    ownersHint: 'Bir isim yazıp Enter’a bas. Öneriler bu dosyadaki kişileri ve daha önce kullandığın isimleri içerir.',
+    ownersHint: 'Bir isim yazıp Enter’a bas. Öneriler ekip listesinden, bu dosyada kullanılan sorumlulardan ve daha önce yazdığın isimlerden gelir.',
     jira: 'Jira linkleri', slack: 'Slack thread’leri', addJira: '+ Jira linki ekle', addSlack: '+ Slack thread’i ekle',
     notes: 'Notlar', notesPh: 'Developer’ların (ve Claude’un) bilmesi gerekenler: davranış, etkileşimler, kurallar, edge case’ler, kararlar…',
     create: 'Spec kartı ekle', save: 'Değişiklikleri kaydet', saved: 'Kaydedildi', remove: 'Kaldır',
@@ -559,6 +563,43 @@ let saving = false;
 
 function send(m) { parent.postMessage({ pluginMessage: m }, '*'); }
 
+// ---------- People suggestions ----------
+// Figma only tells plugins who has the file open right now, so the team roster lives in
+// team.json in the GitHub repo. It is merged with the people the plugin finds in the file.
+const TEAM_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/team.json';
+let team = { design: [], dev: [], product: [] };
+let filePeople = []; // [{ name, roles }] from code.js
+
+async function loadTeam() {
+  try {
+    const res = await fetch(TEAM_URL + '?t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) return;
+    const j = await res.json();
+    const list = (a) => (Array.isArray(a) ? a.filter((n) => typeof n === 'string' && n.trim()).map((n) => n.trim()) : []);
+    team = { design: list(j.design), dev: list(j.development || j.dev), product: list(j.product) };
+    renderPeople();
+  } catch (e) {} // suggestions are a convenience, the plugin works without them
+}
+
+// Each role gets its own suggestion list: people known for that role first, then everyone else.
+function renderPeople() {
+  ['design', 'dev', 'product'].forEach((role) => {
+    const first = [], rest = [];
+    const push = (arr, n) => { if (first.indexOf(n) === -1 && rest.indexOf(n) === -1) arr.push(n); };
+    team[role].forEach((n) => push(first, n));
+    filePeople.filter((p) => p.roles.indexOf(role) !== -1).forEach((p) => push(first, p.name));
+    ['design', 'dev', 'product'].forEach((r) => team[r].forEach((n) => push(rest, n)));
+    filePeople.forEach((p) => push(rest, p.name));
+    const dl = $('people-' + role);
+    dl.innerHTML = '';
+    first.concat(rest.sort((a, b) => a.localeCompare(b))).forEach((n) => {
+      const o = document.createElement('option');
+      o.value = n;
+      dl.append(o);
+    });
+  });
+}
+
 function emptyForm(me) {
   return { status: 'wip', owners: { design: me ? [me] : [], dev: [], product: [] }, jira: [], slack: [], notes: '' };
 }
@@ -596,7 +637,9 @@ function renderChips() {
     form.owners[role].forEach((name, i) => {
       const c = document.createElement('span');
       c.className = 'chip';
-      c.textContent = name;
+      const label = document.createElement('span');
+      label.textContent = name;
+      c.append(label);
       const x = document.createElement('button');
       x.innerHTML = X;
       x.onclick = (e) => { e.stopPropagation(); form.owners[role].splice(i, 1); markDirty(); renderChips(); };
@@ -604,7 +647,7 @@ function renderChips() {
       box.append(c);
     });
     const input = document.createElement('input');
-    input.setAttribute('list', 'people');
+    input.setAttribute('list', 'people-' + role);
     const commit = (refocus) => {
       const v = input.value.trim().replace(/,$/, '').trim();
       if (v && form.owners[role].indexOf(v) === -1) { form.owners[role].push(v); markDirty(); }
@@ -621,7 +664,7 @@ function renderChips() {
     // Picking a suggestion from the datalist fires `input` with the full name.
     input.oninput = (e) => {
       if (!e.inputType || e.inputType === 'insertReplacementText') {
-        if (Array.from($('people').options).some((o) => o.value === input.value)) commit(true);
+        if (Array.from($('people-' + role).options).some((o) => o.value === input.value)) commit(true);
       }
     };
     input.onblur = () => { if (input.value.trim()) commit(false); };
@@ -910,13 +953,14 @@ onmessage = (e) => {
   if (!m) return;
   if (m.type === 'prefs') {
     lang = m.lang === 'tr' ? 'tr' : 'en';
-    $('people').innerHTML = '';
-    (m.people || []).forEach((n) => { const o = document.createElement('option'); o.value = n; $('people').append(o); });
     applyLang();
     document.body.classList.remove('loading');
   } else if (m.type === 'state') {
     if (saving) { saving = false; dirty = false; }
     render(m);
+  } else if (m.type === 'people') {
+    filePeople = m.people || [];
+    renderPeople();
   } else if (m.type === 'overview') {
     overview = m;
     $('scanAll').textContent = t().scanAll;
@@ -937,6 +981,7 @@ applyLang();
 send({ type: 'ready' });
 setTimeout(() => document.body.classList.remove('loading'), 1000); // fallback if prefs never arrive
 checkVersion();
+loadTeam();
 
 // Light sync so changes made by other designers show up.
 setInterval(() => { if (!dirty && !saving) send({ type: 'refresh' }); }, 3000);

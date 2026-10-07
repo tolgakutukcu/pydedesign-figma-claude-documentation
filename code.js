@@ -14,10 +14,11 @@ const IDX_PREFIX = 'idx:'; // per-target index entries on the document root, use
 figma.skipInvisibleInstanceChildren = true; // keeps change detection fast in big files
 figma.showUI(__html__, { width: 360, height: 640, themeColors: true });
 
+// `color` is the status pill, `sticky` the note's paper color (FigJam-like sticky tones).
 const STATUSES = {
-  wip: { label: 'Work in progress', color: '#F59E0B' },
-  review: { label: 'In review', color: '#7C5CFF' },
-  ready: { label: 'Ready for development', color: '#1BC47D' }
+  wip: { label: 'Work in progress', color: '#D97706', sticky: '#FFEFA6' },
+  review: { label: 'In review', color: '#7C5CFF', sticky: '#E6DDFF' },
+  ready: { label: 'Ready for development', color: '#14A367', sticky: '#C9F2DA' }
 };
 
 // ---------- Helpers ----------
@@ -190,10 +191,9 @@ function hashTarget(target) {
 
 // ---------- Card rendering ----------
 
-const C = {
-  text: '#1E1E1E', secondary: '#6B6B6B', tertiary: '#9A9A9A', border: '#E6E6E6',
-  accent: '#4261EE', bg: '#FFFFFF', warn: '#B45309', warnBg: '#FEF3C7'
-};
+// Ink colors are translucent black so they read well on every sticky color.
+const C = { link: '#2B49D6', warn: '#9A3412', warnBg: '#FFFFFF' };
+const INK = { text: 1, secondary: 0.62, tertiary: 0.4 };
 const FONTS = {
   regular: { family: 'Inter', style: 'Regular' },
   medium: { family: 'Inter', style: 'Medium' },
@@ -204,12 +204,13 @@ function ensureFonts() {
   return Promise.all(Object.keys(FONTS).map((k) => figma.loadFontAsync(FONTS[k])));
 }
 
+// `color` is a hex, or one of the INK levels ('text' | 'secondary' | 'tertiary').
 function text(chars, font, size, color, name) {
   const t = figma.createText();
   t.fontName = FONTS[font];
   t.fontSize = size;
   t.characters = chars;
-  t.fills = [solid(color)];
+  t.fills = [INK[color] !== undefined ? solid('#1E1E1E', INK[color]) : solid(color)];
   t.lineHeight = { unit: 'PERCENT', value: 145 };
   if (name) t.name = name;
   return t;
@@ -236,30 +237,30 @@ function put(parent, child, fill) {
 }
 
 function heading(parent, label) {
-  const t = put(parent, text(label.toUpperCase(), 'semibold', 11, C.accent, label), true);
+  const t = put(parent, text(label.toUpperCase(), 'bold', 11, 'secondary', label), true);
   t.letterSpacing = { unit: 'PERCENT', value: 6 };
 }
 
 function row(parent, label, value, empty) {
   const r = put(parent, stack(label, 'HORIZONTAL', 12), true);
-  const l = put(r, text(label, 'medium', 13, C.secondary, 'Label'));
+  const l = put(r, text(label, 'medium', 13, 'secondary', 'Label'));
   l.resize(104, l.height);
   l.textAutoResize = 'HEIGHT';
-  put(r, text(value || empty, 'regular', 13, value ? C.text : C.tertiary, 'Value'), true);
+  put(r, text(value || empty, 'regular', 13, value ? 'text' : 'tertiary', 'Value'), true);
 }
 
 function links(parent, label, urls) {
   const r = put(parent, stack(label, 'HORIZONTAL', 12), true);
-  const l = put(r, text(label, 'medium', 13, C.secondary, 'Label'));
+  const l = put(r, text(label, 'medium', 13, 'secondary', 'Label'));
   l.resize(104, l.height);
   l.textAutoResize = 'HEIGHT';
   const col = put(r, stack('Links', 'VERTICAL', 4), true);
   if (!urls.length) {
-    put(col, text('None', 'regular', 13, C.tertiary, 'Value'), true);
+    put(col, text('None', 'regular', 13, 'tertiary', 'Value'), true);
     return;
   }
   for (const url of urls) {
-    const t = put(col, text(url, 'regular', 13, C.accent, 'Link'), true);
+    const t = put(col, text(url, 'regular', 13, C.link, 'Link'), true);
     try {
       t.setRangeHyperlink(0, url.length, { type: 'URL', value: url });
       t.textDecoration = 'UNDERLINE';
@@ -278,21 +279,22 @@ function renderCard(card, target, data) {
   card.resize(440, card.height);
   card.itemSpacing = 20;
   card.paddingTop = card.paddingBottom = card.paddingLeft = card.paddingRight = 28;
-  card.cornerRadius = 20;
-  card.fills = [solid(C.bg)];
-  card.strokes = [solid(st.color)];
-  card.strokeWeight = 2;
-  card.strokeAlign = 'INSIDE';
-  card.effects = [{
-    type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.08 }, offset: { x: 0, y: 4 },
-    radius: 24, spread: 0, visible: true, blendMode: 'NORMAL'
-  }];
+  // Sticky note look: flat paper color, nearly square corners, soft lifted shadow.
+  card.cornerRadius = 4;
+  card.fills = [solid(st.sticky)];
+  card.strokes = [];
+  card.effects = [
+    { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.1 }, offset: { x: 0, y: 1 },
+      radius: 3, spread: 0, visible: true, blendMode: 'NORMAL' },
+    { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.12 }, offset: { x: 0, y: 10 },
+      radius: 24, spread: -4, visible: true, blendMode: 'NORMAL' }
+  ];
 
   // Header: eyebrow + status pill, then the target name and a one-line instruction for readers.
   const top = put(card, stack('Header', 'HORIZONTAL', 12), true);
   top.primaryAxisAlignItems = 'SPACE_BETWEEN';
   top.counterAxisAlignItems = 'CENTER';
-  put(top, text('📋 DESIGN SPEC', 'bold', 12, C.accent, 'Eyebrow'));
+  put(top, text('📋 DESIGN SPEC', 'bold', 12, 'secondary', 'Eyebrow'));
   const pill = put(top, stack('Status', 'HORIZONTAL', 0));
   pill.paddingTop = pill.paddingBottom = 5;
   pill.paddingLeft = pill.paddingRight = 12;
@@ -301,18 +303,18 @@ function renderCard(card, target, data) {
   put(pill, text(st.label, 'bold', 12, '#FFFFFF', 'Status label'));
 
   const titles = put(card, stack('Title', 'VERTICAL', 6), true);
-  put(titles, text(target.name, 'bold', 22, C.text, 'Name'), true);
+  put(titles, text(target.name, 'bold', 22, 'text', 'Name'), true);
   put(titles, text(
     'Documents the ' + (target.type === 'SECTION' ? 'section this card sits in' : 'screen next to this card') +
     '. Developers and AI agents (e.g. Claude): read this card before implementing the design.',
-    'regular', 12, C.secondary, 'About'), true);
+    'regular', 12, 'secondary', 'About'), true);
 
   if (data.status === 'ready' && data.changed) {
     const w = put(card, stack('Warning', 'VERTICAL', 0), true);
     w.paddingTop = w.paddingBottom = 10;
     w.paddingLeft = w.paddingRight = 12;
     w.cornerRadius = 10;
-    w.fills = [solid(C.warnBg)];
+    w.fills = [solid(C.warnBg, 0.75)];
     put(w, text(
       '⚠ The design changed after it was marked Ready for development (detected ' + fmtDate(data.changed.at) +
       '). Confirm the details with the design owner before implementing.',
@@ -339,14 +341,14 @@ function renderCard(card, target, data) {
 
   const notes = put(card, stack('Notes', 'VERTICAL', 8), true);
   heading(notes, 'Notes');
-  put(notes, text(data.notes.trim() || 'No notes.', 'regular', 14, data.notes.trim() ? C.text : C.tertiary, 'Notes'), true);
+  put(notes, text(data.notes.trim() || 'No notes.', 'regular', 14, data.notes.trim() ? 'text' : 'tertiary', 'Notes'), true);
 
   const line = figma.createRectangle();
   line.name = 'Divider';
   line.resize(10, 1);
-  line.fills = [solid(C.border)];
+  line.fills = [solid('#1E1E1E', 0.12)];
   put(card, line, true);
-  put(card, text('Last updated by ' + data.by + ' · ' + fmtDate(data.at), 'regular', 11, C.tertiary, 'Last updated'), true);
+  put(card, text('Last updated by ' + data.by + ' · ' + fmtDate(data.at), 'regular', 11, 'tertiary', 'Last updated'), true);
 }
 
 // Grows a section so the card fits inside it, with breathing room.
@@ -444,6 +446,7 @@ async function rescanPage(page) {
     if (!data) continue;
     found.add(n.id);
     writeIndex(n, data);
+    registerPeople(data);
   }
   for (const e of readIndex()) {
     if (e.pageId === page.id && !found.has(e.id)) removeIndex(e.id);
@@ -521,19 +524,64 @@ const PEOPLE_KEY = 'pyde-spec-people';
 const LANG_KEY = 'pyde-spec-lang';
 let lang = 'en';
 
-async function people() {
-  const names = new Set();
-  const saved = await figma.clientStorage.getAsync(PEOPLE_KEY);
-  if (Array.isArray(saved)) saved.forEach((n) => names.add(n));
-  try { figma.activeUsers.forEach((u) => u.name && names.add(u.name)); } catch (e) {}
-  if (figma.currentUser) names.add(figma.currentUser.name);
-  return Array.from(names).sort((a, b) => a.localeCompare(b));
+// Figma only exposes the people who have this file open right now (activeUsers), so suggestions
+// are built from several sources. The UI adds the team roster from team.json on GitHub.
+//  - every owner ever saved in a spec in this file (shared, so the whole team sees them)
+//  - names this user typed before, in any file (local)
+//  - people currently in the file, and the current user
+const PERSON_PREFIX = 'person:';
+
+// One key per name on the document root, storing which roles the person was assigned to.
+function registerPeople(data) {
+  const roles = ['design', 'dev', 'product'];
+  for (const role of roles) {
+    for (const name of data.owners[role]) {
+      const key = PERSON_PREFIX + name;
+      let known = [];
+      try { known = JSON.parse(figma.root.getSharedPluginData(NS, key) || '[]'); } catch (e) {}
+      if (known.indexOf(role) === -1) {
+        known.push(role);
+        figma.root.setSharedPluginData(NS, key, JSON.stringify(known));
+      }
+    }
+  }
 }
+
+async function people() {
+  const map = {}; // name -> roles
+  const add = (name, roles) => {
+    if (!name) return;
+    map[name] = map[name] || [];
+    (roles || []).forEach((r) => { if (map[name].indexOf(r) === -1) map[name].push(r); });
+  };
+  for (const k of figma.root.getSharedPluginDataKeys(NS)) {
+    if (k.indexOf(PERSON_PREFIX) !== 0) continue;
+    let roles = [];
+    try { roles = JSON.parse(figma.root.getSharedPluginData(NS, k) || '[]'); } catch (e) {}
+    add(k.slice(PERSON_PREFIX.length), roles);
+  }
+  const saved = await figma.clientStorage.getAsync(PEOPLE_KEY);
+  if (Array.isArray(saved)) saved.forEach((p) => typeof p === 'string' ? add(p) : add(p.name, p.roles));
+  try { figma.activeUsers.forEach((u) => add(u.name)); } catch (e) {}
+  if (figma.currentUser) add(figma.currentUser.name);
+  return Object.keys(map).sort((a, b) => a.localeCompare(b)).map((name) => ({ name, roles: map[name] }));
+}
+
 async function rememberPeople(data) {
   const saved = (await figma.clientStorage.getAsync(PEOPLE_KEY)) || [];
-  const all = data.owners.design.concat(data.owners.dev, data.owners.product);
-  const merged = all.concat(saved.filter((n) => all.indexOf(n) === -1)).slice(0, 80);
-  await figma.clientStorage.setAsync(PEOPLE_KEY, merged);
+  const list = saved.map((p) => (typeof p === 'string' ? { name: p, roles: [] } : p));
+  for (const role of ['design', 'dev', 'product']) {
+    for (const name of data.owners[role]) {
+      let p = list.find((x) => x.name === name);
+      if (!p) { p = { name, roles: [] }; list.unshift(p); }
+      if (p.roles.indexOf(role) === -1) p.roles.push(role);
+    }
+  }
+  await figma.clientStorage.setAsync(PEOPLE_KEY, list.slice(0, 150));
+}
+
+async function sendPeople() {
+  figma.ui.postMessage({ type: 'people', people: await people() });
 }
 
 // ---------- Messages ----------
@@ -595,7 +643,9 @@ async function save(msg) {
   setRelaunch(node, card, data);
   syncDevStatus(node, data.status);
   writeIndex(node, data);
+  registerPeople(data);
   await rememberPeople(data);
+  await sendPeople();
   lastCheckedId = node.id;
   figma.notify(t('Design spec saved', 'Design spec kaydedildi'));
 }
@@ -648,7 +698,10 @@ figma.ui.onmessage = async (msg) => {
     if (msg.type === 'ready') {
       const saved = await figma.clientStorage.getAsync(LANG_KEY);
       if (saved === 'en' || saved === 'tr') lang = saved;
-      figma.ui.postMessage({ type: 'prefs', lang, people: await people() });
+      figma.ui.postMessage({ type: 'prefs', lang });
+      // Picks up owners from specs saved before people were tracked (indexed lookup, cheap).
+      try { await rescanPage(figma.currentPage); } catch (e) {}
+      await sendPeople();
       return pushState(true);
     }
     if (msg.type === 'setLang') {

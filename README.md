@@ -8,7 +8,7 @@ A Figma plugin that attaches a **design spec card** to a section (or a root fram
 - Free-text notes
 - Last updated by / when (automatic)
 
-The card is a normal Figma frame made of plain text layers, so Figma MCP and Dev Mode read it like any other part of the design. The same data is also stored as JSON on the section (shared plugin data, including the section's id), which is what the plugin reads and edits.
+The card looks like a sticky note whose color follows the status (yellow = in progress, purple = in review, green = ready). It is a normal Figma frame made of plain text layers, so Figma MCP and Dev Mode read it like any other part of the design. The same data is also stored as JSON on the section (shared plugin data, including the section's id), which is what the plugin reads and edits.
 
 ## Install
 
@@ -34,6 +34,25 @@ Don't edit the card's text by hand — it is regenerated from the form on every 
 ### Overview
 
 The **Overview** tab lists every spec in the file with its status. The current page is rescanned each time you open the tab, using Figma's indexed search, so it is fast even in big files. Other pages show their last known state. **Scan all pages** loads every page and refreshes everything; it can take a while in large files.
+
+## Owner suggestions
+
+Figma only lets plugins see the people who have the file open right now, so name suggestions are combined from:
+
+1. **`team.json` in this repo**: the team roster, per role. Edit it and push to `main`; everyone gets the new list the next time they open the plugin (no version bump needed).
+2. Every owner saved in a spec in the current file (shared with the whole team).
+3. Names you typed before, in any file (stored only on your machine).
+4. People who currently have the file open, and you.
+
+```json
+{
+  "design": ["Name Surname"],
+  "development": ["Name Surname"],
+  "product": ["Name Surname"]
+}
+```
+
+Names listed for a role are suggested first in that role's field.
 
 ## For developers using Claude Code + Figma MCP
 
