@@ -1,0 +1,17 @@
+{
+  "name": "Pyde Design Spec",
+  "id": "1000000000000000002",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "documentAccess": "dynamic-page",
+  "permissions": ["currentuser", "activeusers"],
+  "relaunchButtons": [
+    { "command": "edit", "name": "Edit design spec" }
+  ],
+  "networkAccess": {
+    "allowedDomains": ["https://raw.githubusercontent.com"],
+    "reasoning": "Checks the latest plugin version published on GitHub."
+  }
+}

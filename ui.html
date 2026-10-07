@@ -1,0 +1,945 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root {
+    --accent: #4261EE;
+    --accent-soft: rgba(66, 97, 238, .14);
+    --wip: #F59E0B;
+    --review: #7C5CFF;
+    --ready: #1BC47D;
+    --warn: #B45309;
+    --warn-bg: rgba(245, 158, 11, .14);
+    --danger: #E5484D;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body {
+    display: flex; flex-direction: column;
+    font: 12px/1.45 Inter, system-ui, sans-serif;
+    color: var(--figma-color-text); background: var(--figma-color-bg);
+    -webkit-font-smoothing: antialiased;
+  }
+  body.loading { visibility: hidden; } /* avoids a language flash before saved prefs arrive */
+  button, input, textarea { font: inherit; color: inherit; }
+
+  header { flex: none; padding: 16px 16px 0; }
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .logo { flex: none; width: 34px; height: 34px; border-radius: 10px; }
+  .eyebrow {
+    font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 2px;
+  }
+  .eyebrow small { font-size: 10px; letter-spacing: 0; text-transform: none; opacity: .7; font-weight: 500; }
+  h1 { margin: 0; font-size: 15px; line-height: 1.25; font-weight: 700; letter-spacing: -.01em; }
+
+  .icon-btn {
+    flex: none; width: 24px; height: 24px; display: grid; place-items: center; padding: 0;
+    border: 0; border-radius: 7px; cursor: pointer; background: transparent;
+    color: var(--figma-color-text-secondary); transition: background .15s, color .15s;
+  }
+  .icon-btn:hover { background: var(--figma-color-bg-hover); color: var(--figma-color-text); }
+  .icon-btn svg { width: 16px; height: 16px; }
+
+  .tabs { display: flex; gap: 16px; margin-top: 12px; border-bottom: 1px solid var(--figma-color-border); }
+  .tabs button {
+    padding: 8px 0; border: 0; background: none; cursor: pointer; font-weight: 600;
+    color: var(--figma-color-text-secondary); border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tabs button:hover { color: var(--figma-color-text); }
+  .tabs button.on { color: var(--figma-color-text); border-bottom-color: var(--accent); }
+
+  main { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 16px 16px; }
+  .view { display: none; }
+  body.view-spec #spec, body.view-overview #overview { display: block; }
+
+  /* Selected target */
+  .target {
+    display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: 10px;
+    background: var(--figma-color-bg-secondary); border: 1px solid var(--figma-color-border);
+  }
+  .target .ico {
+    flex: none; width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .target .ico svg { width: 16px; height: 16px; }
+  .target .meta { min-width: 0; flex: 1; }
+  .target .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .target .sub { color: var(--figma-color-text-secondary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .badge {
+    flex: none; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 999px;
+    background: var(--figma-color-bg); border: 1px solid var(--figma-color-border); color: var(--figma-color-text-secondary);
+  }
+
+  .banner {
+    display: none; margin-top: 10px; padding: 10px 12px; border-radius: 10px;
+    background: var(--warn-bg); color: var(--warn);
+  }
+  .banner.show { display: block; }
+  .banner b { display: block; margin-bottom: 2px; }
+  .banner .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .banner.info { background: var(--accent-soft); color: var(--figma-color-text); }
+
+  .field { margin-top: 16px; }
+  .lbl { font-size: 11px; font-weight: 600; color: var(--figma-color-text-secondary); margin-bottom: 6px; }
+  .hint { font-size: 11px; color: var(--figma-color-text-tertiary); margin-top: 4px; }
+
+  /* Status segmented control */
+  .seg {
+    display: flex; padding: 3px; gap: 3px; border-radius: 10px;
+    background: var(--figma-color-bg-secondary); border: 1px solid var(--figma-color-border);
+  }
+  .seg button {
+    flex: 1; font-weight: 500; padding: 7px 4px; border: 0; border-radius: 7px; cursor: pointer;
+    background: transparent; color: var(--figma-color-text-secondary); transition: all .15s;
+    display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
+  }
+  .seg button:hover { color: var(--figma-color-text); }
+  .seg button.on { color: #fff; font-weight: 600; }
+  .seg button[data-status="wip"].on { background: var(--wip); }
+  .seg button[data-status="review"].on { background: var(--review); }
+  .seg button[data-status="ready"].on { background: var(--ready); }
+  .seg button[data-lang].on { background: var(--accent); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+  .dot.wip { background: var(--wip); } .dot.review { background: var(--review); } .dot.ready { background: var(--ready); }
+  .seg button.on .dot { background: #fff; }
+
+  /* Inputs */
+  .input, textarea, .chips {
+    width: 100%; border-radius: 8px; border: 1px solid var(--figma-color-border);
+    background: var(--figma-color-bg); outline: none; transition: border-color .15s;
+  }
+  .input { padding: 7px 9px; }
+  .input:focus, textarea:focus, .chips:focus-within { border-color: var(--accent); }
+  textarea { padding: 8px 9px; min-height: 120px; resize: vertical; line-height: 1.5; }
+
+  .owner { display: grid; grid-template-columns: 82px 1fr; align-items: start; gap: 8px; margin-bottom: 6px; }
+  .owner span { padding-top: 7px; color: var(--figma-color-text-secondary); }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; padding: 4px; min-height: 32px; cursor: text; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 8px; border-radius: 6px;
+    background: var(--accent-soft); font-weight: 500;
+  }
+  .chip button {
+    width: 16px; height: 16px; padding: 0; border: 0; border-radius: 4px; cursor: pointer; background: none;
+    color: var(--figma-color-text-secondary); display: grid; place-items: center;
+  }
+  .chip button:hover { background: var(--figma-color-bg-hover); color: var(--figma-color-text); }
+  .chips input { flex: 1; min-width: 80px; border: 0; outline: none; background: none; padding: 3px 4px; }
+
+  .link-row { display: flex; gap: 4px; margin-bottom: 6px; }
+  .link-row .input { flex: 1; }
+  .add {
+    border: 1px dashed var(--figma-color-border-strong); background: none; border-radius: 8px; cursor: pointer;
+    padding: 6px 10px; color: var(--figma-color-text-secondary); font-weight: 500; width: 100%; text-align: left;
+  }
+  .add:hover { color: var(--figma-color-text); background: var(--figma-color-bg-hover); }
+
+  .btn {
+    padding: 7px 12px; border-radius: 8px; cursor: pointer; font-weight: 600;
+    border: 1px solid var(--figma-color-border); background: var(--figma-color-bg); transition: background .15s, filter .15s;
+  }
+  .btn:hover { background: var(--figma-color-bg-hover); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.primary:disabled { opacity: .5; cursor: default; filter: none; }
+  .btn.ghost-danger { border-color: transparent; background: none; color: var(--danger); font-weight: 500; }
+  .btn.ghost-danger:hover { background: rgba(229, 72, 77, .1); }
+  .btn.small { padding: 4px 9px; font-size: 11px; }
+
+  footer {
+    flex: none; display: none; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 16px; border-top: 1px solid var(--figma-color-border);
+  }
+  body.view-spec.has-target footer { display: flex; }
+  .info { min-width: 0; color: var(--figma-color-text-secondary); font-size: 11px; }
+  .info div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .foot-actions { flex: none; display: flex; gap: 4px; }
+
+  .placeholder {
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; padding: 60px 24px; text-align: center;
+  }
+  body.no-target .placeholder { display: flex; }
+  body.no-target #form { display: none; }
+  .placeholder .big {
+    width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; margin-bottom: 6px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .placeholder .big svg { width: 24px; height: 24px; }
+  .placeholder b { font-size: 13px; }
+  .placeholder span { color: var(--figma-color-text-secondary); }
+
+  /* Overview */
+  .counts { display: flex; gap: 6px; flex-wrap: wrap; }
+  .counts button {
+    display: flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--figma-color-border); background: var(--figma-color-bg); font-weight: 500;
+  }
+  .counts button b { font-variant-numeric: tabular-nums; }
+  .counts button.on { border-color: var(--accent); background: var(--accent-soft); }
+  .page-name {
+    margin: 16px 0 6px; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--figma-color-text-tertiary);
+  }
+  .page-name small { text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .entry {
+    display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; margin-bottom: 4px;
+    border-radius: 9px; border: 1px solid var(--figma-color-border); background: var(--figma-color-bg);
+    cursor: pointer; text-align: left;
+  }
+  .entry:hover { background: var(--figma-color-bg-hover); }
+  .entry .meta { flex: 1; min-width: 0; }
+  .entry .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .entry .sub { font-size: 11px; color: var(--figma-color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .entry .warn { flex: none; color: var(--warn); font-size: 11px; font-weight: 600; }
+  .ov-empty { padding: 40px 12px; text-align: center; color: var(--figma-color-text-secondary); }
+  .ov-foot { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+
+  /* Settings */
+  .settings {
+    position: fixed; inset: 0; z-index: 5; display: none; flex-direction: column; background: var(--figma-color-bg);
+  }
+  body.settings-open .settings { display: flex; }
+  .s-head { display: flex; align-items: center; gap: 8px; padding: 14px 16px; border-bottom: 1px solid var(--figma-color-border); }
+  .s-head h2 { margin: 0; font-size: 14px; letter-spacing: -.01em; }
+  .s-body { padding: 16px; display: flex; flex-direction: column; gap: 18px; }
+  .s-ver { color: var(--figma-color-text-tertiary); font-size: 11px; }
+
+  /* Confirm dialog */
+  .confirm {
+    position: fixed; inset: 0; z-index: 8; display: none; align-items: center; justify-content: center;
+    padding: 24px; background: rgba(0, 0, 0, .35);
+  }
+  .confirm.show { display: flex; }
+  .confirm .box {
+    background: var(--figma-color-bg); border-radius: 12px; padding: 16px; max-width: 280px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, .25);
+  }
+  .confirm h3 { margin: 0 0 4px; font-size: 13px; }
+  .confirm p { margin: 0; color: var(--figma-color-text-secondary); }
+  .confirm .actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; }
+  .btn.danger { background: var(--danger); border-color: var(--danger); color: #fff; }
+
+  /* Blocking screen shown when the installed version is outdated */
+  .update {
+    position: fixed; inset: 0; z-index: 10; display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px; padding: 32px; text-align: center;
+    background: var(--figma-color-bg);
+  }
+  body.outdated .update { display: flex; }
+  .update .big, .gate .big {
+    width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; margin-bottom: 8px;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .update .big svg, .gate .big svg { width: 28px; height: 28px; }
+  .update h2, .gate h2 { margin: 0; font-size: 15px; letter-spacing: -.01em; }
+  .update p, .gate p { margin: 0; color: var(--figma-color-text-secondary); max-width: 250px; }
+  .update .versions { font-variant-numeric: tabular-nums; font-size: 11px; margin-top: 2px; }
+  .update a.btn { margin-top: 14px; background: var(--accent); border-color: var(--accent); color: #fff; text-decoration: none; }
+  .update a.btn:hover { filter: brightness(1.08); }
+  .update .how { margin-top: 10px; font-size: 11px; }
+
+  /* Small language switch pinned to the bottom of the update / version-check screens */
+  .lang-mini {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 11; display: none;
+    padding: 2px; gap: 2px; border-radius: 8px;
+    background: var(--figma-color-bg-secondary); border: 1px solid var(--figma-color-border);
+  }
+  body.checking .lang-mini, body.check-failed .lang-mini, body.outdated .lang-mini { display: flex; }
+  .lang-mini button {
+    font-size: 10px; font-weight: 600; line-height: 1; padding: 4px 9px; border: 0; border-radius: 6px;
+    cursor: pointer; background: transparent; color: var(--figma-color-text-secondary); transition: all .15s;
+  }
+  .lang-mini button:hover { color: var(--figma-color-text); }
+  .lang-mini button.on { background: var(--accent); color: #fff; }
+
+  /* Gate shown while the version check runs, and when it can't complete */
+  .gate {
+    position: fixed; inset: 0; z-index: 9; display: none; flex-direction: column;
+    align-items: center; justify-content: center; gap: 8px; padding: 32px; text-align: center;
+    background: var(--figma-color-bg);
+  }
+  body.checking .gate, body.check-failed .gate { display: flex; }
+  .gate .spinner {
+    width: 26px; height: 26px; border-radius: 50%; margin-bottom: 8px;
+    border: 3px solid var(--figma-color-bg-secondary); border-top-color: var(--accent);
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .gate .big { display: none; }
+  .gate .retry { display: none; margin-top: 14px; }
+  body.check-failed .gate .spinner { display: none; }
+  body.check-failed .gate .big { display: grid; }
+  body.check-failed .gate .retry { display: block; }
+  body.checking .gate .failed-only, body.check-failed .gate .checking-only { display: none; }
+</style>
+</head>
+<body class="loading view-spec no-target">
+  <header>
+    <div class="top">
+      <div class="brand">
+        <img class="logo" alt="">
+        <div>
+          <div class="eyebrow">Pyde Design <small id="ver"></small></div>
+          <h1>Design Spec</h1>
+        </div>
+      </div>
+      <button class="icon-btn" id="openSettings" data-i18n-title="settings">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M2 4.5h6M11.5 4.5H14M2 11.5h2.5M8 11.5h6"/><circle cx="9.75" cy="4.5" r="1.75"/><circle cx="6.25" cy="11.5" r="1.75"/></svg>
+      </button>
+    </div>
+    <nav class="tabs">
+      <button data-view="spec" class="on" data-i18n="tabSpec"></button>
+      <button data-view="overview" data-i18n="tabOverview"></button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="view" id="spec">
+      <div class="placeholder">
+        <div class="big"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M5 3l14 7-6 2-2 6L5 3z"/></svg></div>
+        <b id="phTitle"></b>
+        <span id="phText"></span>
+      </div>
+
+      <div id="form">
+        <div class="target">
+          <div class="ico" id="targetIco"></div>
+          <div class="meta">
+            <div class="name" id="targetName"></div>
+            <div class="sub" id="targetSub"></div>
+          </div>
+          <span class="badge" id="badge"></span>
+        </div>
+
+        <div class="banner info" id="staleBanner">
+          <b data-i18n="staleTitle"></b>
+          <span id="staleText"></span>
+          <div class="actions"><button class="btn small" id="discard" data-i18n="discard"></button></div>
+        </div>
+
+        <div class="banner" id="changedBanner">
+          <b data-i18n="changedTitle"></b>
+          <span id="changedText"></span>
+          <div class="actions">
+            <button class="btn small" id="accept" data-i18n="accept"></button>
+            <button class="btn small" id="toReview" data-i18n="toReview"></button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="lbl" data-i18n="status"></div>
+          <div class="seg" id="statusSeg">
+            <button data-status="wip"><i class="dot wip"></i><span data-i18n="wip"></span></button>
+            <button data-status="review"><i class="dot review"></i><span data-i18n="review"></span></button>
+            <button data-status="ready"><i class="dot ready"></i><span data-i18n="ready"></span></button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="lbl" data-i18n="owners"></div>
+          <div class="owner"><span data-i18n="design"></span><div class="chips" data-role="design"></div></div>
+          <div class="owner"><span data-i18n="dev"></span><div class="chips" data-role="dev"></div></div>
+          <div class="owner"><span data-i18n="product"></span><div class="chips" data-role="product"></div></div>
+          <div class="hint" data-i18n="ownersHint"></div>
+        </div>
+
+        <div class="field">
+          <div class="lbl" data-i18n="jira"></div>
+          <div id="jiraList"></div>
+          <button class="add" data-add="jira" data-i18n="addJira"></button>
+        </div>
+
+        <div class="field">
+          <div class="lbl" data-i18n="slack"></div>
+          <div id="slackList"></div>
+          <button class="add" data-add="slack" data-i18n="addSlack"></button>
+        </div>
+
+        <div class="field">
+          <div class="lbl" data-i18n="notes"></div>
+          <textarea id="notes" data-i18n-placeholder="notesPh"></textarea>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="overview">
+      <div class="counts" id="counts"></div>
+      <div id="ovList"></div>
+      <div class="ov-foot">
+        <span class="hint" data-i18n="ovHint"></span>
+        <button class="btn small" id="scanAll" data-i18n="scanAll"></button>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="info">
+      <div id="upd"></div>
+    </div>
+    <div class="foot-actions">
+      <button class="btn ghost-danger" id="remove" data-i18n="remove"></button>
+      <button class="btn primary" id="save"></button>
+    </div>
+  </footer>
+
+  <datalist id="people"></datalist>
+
+  <div class="confirm" id="confirm">
+    <div class="box">
+      <h3 data-i18n="removeTitle"></h3>
+      <p data-i18n="removeText"></p>
+      <div class="actions">
+        <button class="btn" id="cancelRemove" data-i18n="cancel"></button>
+        <button class="btn danger" id="confirmRemove" data-i18n="remove"></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="settings">
+    <div class="s-head">
+      <button class="icon-btn" id="closeSettings" data-i18n-title="back">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3L5 8l5 5"/></svg>
+      </button>
+      <h2 data-i18n="settings"></h2>
+    </div>
+    <div class="s-body">
+      <div>
+        <div class="lbl" data-i18n="language"></div>
+        <div class="seg">
+          <button data-lang="en">English</button>
+          <button data-lang="tr">Türkçe</button>
+        </div>
+        <div class="hint" data-i18n="cardLangHint"></div>
+      </div>
+      <div class="s-ver" id="sVer"></div>
+    </div>
+  </div>
+
+  <div class="lang-mini">
+    <button data-lang="en">EN</button>
+    <button data-lang="tr">TR</button>
+  </div>
+
+  <div class="gate">
+    <div class="spinner"></div>
+    <div class="big">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8v5M12 16.5v.01M10.3 3.9L2.4 17.5A2 2 0 0 0 4.1 20.5h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+    </div>
+    <h2 class="checking-only" data-i18n="chkTitle"></h2>
+    <p class="checking-only" data-i18n="chkText"></p>
+    <h2 class="failed-only" data-i18n="failTitle"></h2>
+    <p class="failed-only" data-i18n="failText"></p>
+    <button class="btn primary retry" id="retry" data-i18n="retry"></button>
+  </div>
+
+  <div class="update">
+    <div class="big">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"/></svg>
+    </div>
+    <h2 data-i18n="updTitle"></h2>
+    <p data-i18n="updText"></p>
+    <p class="versions" id="versions"></p>
+    <a class="btn" id="download" href="https://github.com/tolgakutukcu/pydedesign-figma-claude-documentation/archive/refs/heads/main.zip" target="_blank" rel="noopener" data-i18n="updDownload"></a>
+    <p class="how" data-i18n="updHow"></p>
+  </div>
+
+<script>
+const VERSION = '1.0.0';
+const VERSION_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/version.json';
+
+const STRINGS = {
+  en: {
+    settings: 'Settings', back: 'Back', language: 'Language', version: 'Version',
+    cardLangHint: 'Only changes the plugin interface. Cards on the canvas are always written in English so they read the same for everyone and for Claude.',
+    tabSpec: 'Spec', tabOverview: 'Overview',
+    emptyTitle: 'Select a section or frame',
+    emptyText: 'A spec attaches to a section, or to a frame placed directly on the page or directly inside a section. You can also select an existing spec card.',
+    multiTitle: 'Select a single section or frame',
+    multiText: (n) => n + ' different sections / frames are selected. A spec belongs to one at a time.',
+    inSection: (s) => 'in section “' + s + '”',
+    noSpec: 'No spec yet', status: 'Status', wip: 'In progress', review: 'In review', ready: 'Ready for dev',
+    statusLong: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
+    owners: 'Owners', design: 'Design', dev: 'Development', product: 'Product',
+    ownersHint: 'Type a name and press Enter. Suggestions include people in this file and names you used before.',
+    jira: 'Jira links', slack: 'Slack threads', addJira: '+ Add Jira link', addSlack: '+ Add Slack thread',
+    notes: 'Notes', notesPh: 'Anything developers (and Claude) should know: behaviour, interactions, rules, edge cases, decisions…',
+    create: 'Add spec card', save: 'Save changes', saved: 'Saved', remove: 'Remove',
+    removeTitle: 'Remove this spec?', removeText: 'The card on the canvas and the saved spec data will be deleted. You can undo with ⌘Z / Ctrl+Z in Figma.',
+    cancel: 'Cancel',
+    lastUpdated: 'Last updated: ', notSaved: 'Not saved yet', unsaved: 'Unsaved changes',
+    staleTitle: 'Selection changed',
+    staleText: (n) => 'You have unsaved changes for “' + n + '”. Saving writes to that one.',
+    discard: 'Discard changes',
+    changedTitle: 'Design changed after Ready',
+    changedText: (d) => 'This design no longer matches the version marked Ready for development (detected ' + d + '). The card on the canvas shows a warning.',
+    accept: 'Accept changes, keep Ready', toReview: 'Move to In review',
+    justNow: 'just now', minAgo: ' min ago', hAgo: ' h ago', dateLocale: 'en-US',
+    ovHint: 'Specs on the current page are refreshed every time you open this tab. Other pages show their last known state.',
+    scanAll: 'Scan all pages', scanning: 'Scanning…', all: 'All', current: 'current page',
+    ovEmpty: 'No specs in this file yet.', ovEmptyFilter: 'No specs with this status.',
+    changed: 'Changed',
+    updTitle: 'Update required',
+    updText: 'A newer version of this plugin is available. Please download it to keep using it.',
+    updDownload: 'Download from GitHub',
+    updHow: 'Then in Figma: Plugins → Development → Import plugin from manifest… and pick the new manifest.json.',
+    installed: 'Installed', latest: 'Latest',
+    chkTitle: 'Checking for updates…', chkText: 'Making sure you are on the latest version.',
+    failTitle: 'Can’t verify version',
+    failText: 'The plugin needs an internet connection to check for updates before it can be used. Check your connection and try again.',
+    retry: 'Try again'
+  },
+  tr: {
+    settings: 'Ayarlar', back: 'Geri', language: 'Dil', version: 'Sürüm',
+    cardLangHint: 'Sadece plugin arayüzünü değiştirir. Canvas’taki kartlar herkes ve Claude için aynı okunsun diye her zaman İngilizce yazılır.',
+    tabSpec: 'Spec', tabOverview: 'Genel bakış',
+    emptyTitle: 'Bir section veya frame seç',
+    emptyText: 'Spec; bir section’a ya da doğrudan sayfada veya doğrudan bir section içinde duran bir frame’e bağlanır. Mevcut bir spec kartını da seçebilirsin.',
+    multiTitle: 'Tek bir section veya frame seç',
+    multiText: (n) => n + ' farklı section / frame seçili. Bir spec aynı anda sadece birine ait olur.',
+    inSection: (s) => '“' + s + '” section’ında',
+    noSpec: 'Henüz spec yok', status: 'Durum', wip: 'Devam ediyor', review: 'İncelemede', ready: 'Dev’e hazır',
+    statusLong: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
+    owners: 'Sorumlular', design: 'Design', dev: 'Development', product: 'Product',
+    ownersHint: 'Bir isim yazıp Enter’a bas. Öneriler bu dosyadaki kişileri ve daha önce kullandığın isimleri içerir.',
+    jira: 'Jira linkleri', slack: 'Slack thread’leri', addJira: '+ Jira linki ekle', addSlack: '+ Slack thread’i ekle',
+    notes: 'Notlar', notesPh: 'Developer’ların (ve Claude’un) bilmesi gerekenler: davranış, etkileşimler, kurallar, edge case’ler, kararlar…',
+    create: 'Spec kartı ekle', save: 'Değişiklikleri kaydet', saved: 'Kaydedildi', remove: 'Kaldır',
+    removeTitle: 'Bu spec kaldırılsın mı?', removeText: 'Canvas’taki kart ve kayıtlı spec verisi silinecek. Figma’da ⌘Z / Ctrl+Z ile geri alabilirsin.',
+    cancel: 'Vazgeç',
+    lastUpdated: 'Son güncelleme: ', notSaved: 'Henüz kaydedilmedi', unsaved: 'Kaydedilmemiş değişiklikler',
+    staleTitle: 'Seçim değişti',
+    staleText: (n) => '“' + n + '” için kaydedilmemiş değişikliklerin var. Kaydedersen oraya yazılır.',
+    discard: 'Değişiklikleri at',
+    changedTitle: 'Ready’den sonra tasarım değişti',
+    changedText: (d) => 'Bu tasarım, Ready for development olarak işaretlenen hâlinden farklı (' + d + ' tespit edildi). Canvas’taki kartta uyarı gösteriliyor.',
+    accept: 'Değişiklikleri onayla, Ready kalsın', toReview: 'In review’a al',
+    justNow: 'az önce', minAgo: ' dk önce', hAgo: ' sa önce', dateLocale: 'tr-TR',
+    ovHint: 'Bulunduğun sayfadaki spec’ler bu sekmeyi her açtığında yenilenir. Diğer sayfalar bilinen son durumu gösterir.',
+    scanAll: 'Tüm sayfaları tara', scanning: 'Taranıyor…', all: 'Tümü', current: 'bu sayfa',
+    ovEmpty: 'Bu dosyada henüz spec yok.', ovEmptyFilter: 'Bu durumda spec yok.',
+    changed: 'Değişti',
+    updTitle: 'Güncelleme gerekli',
+    updText: 'Bu plugin’in daha yeni bir sürümü var. Kullanmaya devam etmek için lütfen indir.',
+    updDownload: 'GitHub’dan indir',
+    updHow: 'Sonra Figma’da: Plugins → Development → Import plugin from manifest… yolunu izleyip yeni manifest.json’ı seç.',
+    installed: 'Yüklü', latest: 'Son',
+    chkTitle: 'Güncelleme kontrol ediliyor…', chkText: 'En son sürümde olduğundan emin olunuyor.',
+    failTitle: 'Sürüm doğrulanamadı',
+    failText: 'Plugin’in kullanılabilmesi için güncelleme kontrolü gerekiyor ve bunun için internet bağlantısı lazım. Bağlantını kontrol edip tekrar dene.',
+    retry: 'Tekrar dene'
+  }
+};
+
+const ICONS = {
+  Frame: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M5.5 2v12M10.5 2v12M2 5.5h12M2 10.5h12"/></svg>',
+  Section: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2 5.5V4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1v1.5M2 5.5h12V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5.5z"/></svg>'
+};
+const X = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg>';
+
+const $ = (id) => document.getElementById(id);
+const t = () => STRINGS[lang];
+let lang = 'en';
+let view = 'spec';
+let lastState = { status: 'none' };
+let overview = null;
+let filter = 'all';
+let latestVersion = null;
+let remoteVersion = null; // last version number read from GitHub (shown in Settings for troubleshooting)
+
+// The form being edited. `editing` is the target it belongs to; it stays put while there are
+// unsaved changes, even if the selection moves elsewhere.
+let form = null;
+let editing = null; // { id, name, hasSpec, spec }
+let dirty = false;
+let saving = false;
+
+function send(m) { parent.postMessage({ pluginMessage: m }, '*'); }
+
+function emptyForm(me) {
+  return { status: 'wip', owners: { design: me ? [me] : [], dev: [], product: [] }, jira: [], slack: [], notes: '' };
+}
+function formFromSpec(s) {
+  return {
+    status: s.status,
+    owners: { design: s.owners.design.slice(), dev: s.owners.dev.slice(), product: s.owners.product.slice() },
+    jira: s.jira.slice(), slack: s.slack.slice(), notes: s.notes
+  };
+}
+
+function ago(ts) {
+  const s = Math.max(0, (Date.now() - ts) / 1000);
+  if (s < 60) return t().justNow;
+  if (s < 3600) return Math.floor(s / 60) + t().minAgo;
+  if (s < 86400) return Math.floor(s / 3600) + t().hAgo;
+  return new Date(ts).toLocaleDateString(t().dateLocale);
+}
+
+function markDirty() {
+  if (!dirty) { dirty = true; renderFooter(); }
+}
+
+// ---------- Form rendering ----------
+
+function renderStatus() {
+  document.querySelectorAll('#statusSeg button').forEach((b) => b.classList.toggle('on', b.dataset.status === form.status));
+}
+
+function renderChips() {
+  document.querySelectorAll('.chips').forEach((box) => {
+    const role = box.dataset.role;
+    const keepFocus = box.contains(document.activeElement);
+    box.innerHTML = '';
+    form.owners[role].forEach((name, i) => {
+      const c = document.createElement('span');
+      c.className = 'chip';
+      c.textContent = name;
+      const x = document.createElement('button');
+      x.innerHTML = X;
+      x.onclick = (e) => { e.stopPropagation(); form.owners[role].splice(i, 1); markDirty(); renderChips(); };
+      c.append(x);
+      box.append(c);
+    });
+    const input = document.createElement('input');
+    input.setAttribute('list', 'people');
+    const commit = (refocus) => {
+      const v = input.value.trim().replace(/,$/, '').trim();
+      if (v && form.owners[role].indexOf(v) === -1) { form.owners[role].push(v); markDirty(); }
+      input.value = '';
+      renderChips();
+      if (refocus) box.querySelector('input').focus();
+    };
+    input.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit(true); }
+      else if (e.key === 'Backspace' && !input.value && form.owners[role].length) {
+        form.owners[role].pop(); markDirty(); renderChips(); box.querySelector('input').focus();
+      }
+    };
+    // Picking a suggestion from the datalist fires `input` with the full name.
+    input.oninput = (e) => {
+      if (!e.inputType || e.inputType === 'insertReplacementText') {
+        if (Array.from($('people').options).some((o) => o.value === input.value)) commit(true);
+      }
+    };
+    input.onblur = () => { if (input.value.trim()) commit(false); };
+    box.onclick = () => input.focus();
+    box.append(input);
+    if (keepFocus) input.focus();
+  });
+}
+
+function renderLinks(kind) {
+  const list = $(kind + 'List');
+  list.innerHTML = '';
+  form[kind].forEach((url, i) => {
+    const row = document.createElement('div');
+    row.className = 'link-row';
+    const input = document.createElement('input');
+    input.className = 'input';
+    input.value = url;
+    input.placeholder = kind === 'jira' ? 'https://yourteam.atlassian.net/browse/…' : 'https://yourteam.slack.com/archives/…';
+    input.oninput = () => { form[kind][i] = input.value; markDirty(); };
+    const x = document.createElement('button');
+    x.className = 'icon-btn';
+    x.innerHTML = X;
+    x.onclick = () => { form[kind].splice(i, 1); markDirty(); renderLinks(kind); };
+    row.append(input, x);
+    list.append(row);
+  });
+}
+
+function renderForm() {
+  renderStatus();
+  renderChips();
+  renderLinks('jira');
+  renderLinks('slack');
+  $('notes').value = form.notes;
+}
+
+function renderFooter() {
+  const s = editing && editing.spec;
+  $('save').textContent = editing && editing.hasSpec ? t().save : t().create;
+  $('save').disabled = saving || (editing && editing.hasSpec && !dirty);
+  $('remove').style.display = editing && editing.hasSpec ? '' : 'none';
+  $('upd').textContent = dirty ? t().unsaved
+    : s && s.at ? t().lastUpdated + (s.by ? s.by + ' · ' : '') + ago(s.at) : t().notSaved;
+}
+
+function renderTarget(m) {
+  $('targetIco').innerHTML = ICONS[m.target.kind];
+  $('targetName').textContent = m.target.name;
+  $('targetSub').textContent = m.target.kind + ' · ' + (m.target.section ? t().inSection(m.target.section) : m.target.page);
+  $('badge').textContent = m.spec ? t().statusLong[m.spec.status] : t().noSpec;
+}
+
+// Fills the form from the plugin state, unless the user is mid-edit.
+function render(m) {
+  lastState = m;
+  const body = document.body.classList;
+
+  if (dirty && editing && !(m.status === 'ok' && m.target.id === editing.id)) {
+    // Selection moved away while editing: keep the form bound to the original target.
+    $('staleBanner').classList.add('show');
+    $('staleText').textContent = t().staleText(editing.name);
+    return;
+  }
+  $('staleBanner').classList.remove('show');
+
+  if (m.status !== 'ok') {
+    editing = null;
+    body.add('no-target');
+    body.remove('has-target');
+    $('phTitle').textContent = m.status === 'multiple' ? t().multiTitle : t().emptyTitle;
+    $('phText').textContent = m.status === 'multiple' ? t().multiText(m.count) : t().emptyText;
+    return;
+  }
+
+  body.remove('no-target');
+  body.add('has-target');
+  renderTarget(m);
+
+  const sameTarget = editing && editing.id === m.target.id;
+  editing = { id: m.target.id, name: m.target.name, hasSpec: !!m.spec, spec: m.spec };
+  // Don't redraw a form that is being typed into (it would reset the cursor).
+  const typing = sameTarget && document.activeElement && $('form').contains(document.activeElement);
+  if (!dirty && !typing) {
+    form = m.spec ? formFromSpec(m.spec) : emptyForm(m.me);
+    renderForm();
+  }
+
+  const changed = m.spec && m.spec.status === 'ready' && m.spec.changed;
+  $('changedBanner').classList.toggle('show', !!changed);
+  if (changed) $('changedText').textContent = t().changedText(new Date(m.spec.changed.at).toLocaleString(t().dateLocale));
+  renderFooter();
+}
+
+function collect() {
+  return {
+    status: form.status,
+    owners: form.owners,
+    jira: form.jira,
+    slack: form.slack,
+    notes: $('notes').value
+  };
+}
+
+function save() {
+  if (!editing || saving) return;
+  saving = true;
+  renderFooter();
+  send({ type: 'save', id: editing.id, spec: collect() });
+}
+
+// ---------- Overview ----------
+
+function renderOverview() {
+  if (!overview) return;
+  const entries = overview.entries.slice().sort((a, b) => (b.at || 0) - (a.at || 0));
+  const count = (s) => entries.filter((e) => s === 'all' || e.status === s).length;
+  $('counts').innerHTML = '';
+  ['all', 'wip', 'review', 'ready'].forEach((s) => {
+    const b = document.createElement('button');
+    b.className = filter === s ? 'on' : '';
+    b.innerHTML = (s === 'all' ? '' : '<i class="dot ' + s + '"></i>') + '<span></span><b></b>';
+    b.querySelector('span').textContent = s === 'all' ? t().all : t()[s];
+    b.querySelector('b').textContent = count(s);
+    b.onclick = () => { filter = s; renderOverview(); };
+    $('counts').append(b);
+  });
+
+  const list = $('ovList');
+  list.innerHTML = '';
+  const shown = entries.filter((e) => filter === 'all' || e.status === filter);
+  if (!shown.length) {
+    const d = document.createElement('div');
+    d.className = 'ov-empty';
+    d.textContent = entries.length ? t().ovEmptyFilter : t().ovEmpty;
+    list.append(d);
+    return;
+  }
+  // Current page first, then the rest alphabetically.
+  const pages = [];
+  shown.forEach((e) => { if (pages.indexOf(e.pageId) === -1) pages.push(e.pageId); });
+  const pageName = (id) => (shown.find((e) => e.pageId === id) || {}).pageName || '';
+  pages.sort((a, b) => (a === overview.currentPageId ? -1 : b === overview.currentPageId ? 1 : pageName(a).localeCompare(pageName(b))));
+  pages.forEach((pid) => {
+    const h = document.createElement('div');
+    h.className = 'page-name';
+    h.textContent = pageName(pid);
+    if (pid === overview.currentPageId) {
+      const small = document.createElement('small');
+      small.textContent = ' · ' + t().current;
+      h.append(small);
+    }
+    list.append(h);
+    shown.filter((e) => e.pageId === pid).forEach((e) => {
+      const b = document.createElement('button');
+      b.className = 'entry';
+      b.innerHTML = '<i class="dot ' + e.status + '"></i><div class="meta"><div class="name"></div><div class="sub"></div></div>';
+      b.querySelector('.name').textContent = e.name;
+      b.querySelector('.sub').textContent = t().statusLong[e.status] + (e.at ? ' · ' + (e.by ? e.by + ' · ' : '') + ago(e.at) : '');
+      if (e.changed) {
+        const w = document.createElement('span');
+        w.className = 'warn';
+        w.textContent = '⚠ ' + t().changed;
+        b.append(w);
+      }
+      b.onclick = () => { send({ type: 'goto', id: e.id }); setView('spec'); };
+      list.append(b);
+    });
+  });
+}
+
+function setView(v) {
+  view = v;
+  document.body.classList.toggle('view-spec', v === 'spec');
+  document.body.classList.toggle('view-overview', v === 'overview');
+  document.querySelectorAll('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.view === v));
+  if (v === 'overview') send({ type: 'overview' });
+}
+
+// ---------- Language ----------
+
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t()[el.dataset.i18n]; });
+  document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t()[el.dataset.i18nTitle]; });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => { el.placeholder = t()[el.dataset.i18nPlaceholder]; });
+  document.querySelectorAll('[data-lang]').forEach((b) => b.classList.toggle('on', b.dataset.lang === lang));
+  $('sVer').textContent = t().version + ' ' + VERSION + (remoteVersion ? '  ·  GitHub: v' + remoteVersion : '');
+  if (latestVersion) $('versions').textContent = t().installed + ': v' + VERSION + '  ·  ' + t().latest + ': v' + latestVersion;
+  render(lastState);
+  renderFooter();
+  renderOverview();
+}
+
+// ---------- Version check (same mechanism as the Handoff Pre Checklist plugin) ----------
+
+// Returns true if version a is older than b (e.g. '1.0.0' < '1.1.0').
+function isOlder(a, b) {
+  const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const x = pa[i] || 0, y = pb[i] || 0;
+    if (x !== y) return x < y;
+  }
+  return false;
+}
+
+// The version check is mandatory: the plugin stays behind a gate until it succeeds.
+// If the check can't complete (offline, GitHub unreachable, bad response) the gate stays up with a retry button.
+// A silent re-check (periodic, while the plugin stays open) only blocks when it positively finds a newer
+// version; a failed silent check is ignored so a brief network blip doesn't interrupt someone mid-work.
+async function checkVersion(silent) {
+  const cl = document.body.classList;
+  if (!silent) {
+    cl.remove('check-failed', 'outdated');
+    cl.add('checking');
+  }
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch(VERSION_URL + '?t=' + Date.now(), { signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const latest = (await res.json()).version;
+    if (typeof latest !== 'string' || !/^\d+\.\d+\.\d+$/.test(latest)) throw new Error('Bad version');
+    remoteVersion = latest;
+    console.log('[Pyde spec] installed v' + VERSION + ', GitHub v' + latest);
+    if (isOlder(VERSION, latest)) {
+      latestVersion = latest;
+      cl.add('outdated');
+    }
+    applyLang();
+    cl.remove('checking');
+  } catch (e) {
+    if (!silent) {
+      cl.remove('checking');
+      cl.add('check-failed');
+    }
+  }
+}
+$('retry').onclick = () => checkVersion();
+setInterval(() => checkVersion(true), 5 * 60 * 1000);
+
+// ---------- Events ----------
+
+document.querySelectorAll('.tabs button').forEach((b) => { b.onclick = () => setView(b.dataset.view); });
+document.querySelectorAll('#statusSeg button').forEach((b) => {
+  b.onclick = () => { form.status = b.dataset.status; markDirty(); renderStatus(); };
+});
+document.querySelectorAll('[data-add]').forEach((b) => {
+  b.onclick = () => {
+    const kind = b.dataset.add;
+    form[kind].push('');
+    markDirty();
+    renderLinks(kind);
+    const inputs = $(kind + 'List').querySelectorAll('input');
+    inputs[inputs.length - 1].focus();
+  };
+});
+$('notes').oninput = () => { form.notes = $('notes').value; markDirty(); };
+$('save').onclick = save;
+$('discard').onclick = () => { dirty = false; editing = null; render(lastState); send({ type: 'refresh' }); };
+$('accept').onclick = () => { if (editing) send({ type: 'resnapshot', id: editing.id }); };
+$('toReview').onclick = () => { form.status = 'review'; renderStatus(); save(); };
+$('remove').onclick = () => $('confirm').classList.add('show');
+$('cancelRemove').onclick = () => $('confirm').classList.remove('show');
+$('confirmRemove').onclick = () => {
+  $('confirm').classList.remove('show');
+  if (editing) { dirty = false; send({ type: 'remove', id: editing.id }); }
+};
+$('scanAll').onclick = () => {
+  $('scanAll').textContent = t().scanning;
+  $('scanAll').disabled = true;
+  send({ type: 'scanAll' });
+};
+$('openSettings').onclick = () => document.body.classList.add('settings-open');
+$('closeSettings').onclick = () => document.body.classList.remove('settings-open');
+document.querySelectorAll('[data-lang]').forEach((b) => {
+  b.onclick = () => { lang = b.dataset.lang; send({ type: 'setLang', lang }); applyLang(); };
+});
+document.addEventListener('keydown', (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save();
+});
+
+onmessage = (e) => {
+  const m = e.data.pluginMessage;
+  if (!m) return;
+  if (m.type === 'prefs') {
+    lang = m.lang === 'tr' ? 'tr' : 'en';
+    $('people').innerHTML = '';
+    (m.people || []).forEach((n) => { const o = document.createElement('option'); o.value = n; $('people').append(o); });
+    applyLang();
+    document.body.classList.remove('loading');
+  } else if (m.type === 'state') {
+    if (saving) { saving = false; dirty = false; }
+    render(m);
+  } else if (m.type === 'overview') {
+    overview = m;
+    $('scanAll').textContent = t().scanAll;
+    $('scanAll').disabled = false;
+    renderOverview();
+  } else if (m.type === 'error') {
+    saving = false;
+    $('scanAll').textContent = t().scanAll;
+    $('scanAll').disabled = false;
+    renderFooter();
+  }
+};
+
+document.querySelector('.logo').src = 'data:image/png;base64,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';
+$('ver').textContent = 'v' + VERSION;
+form = emptyForm(null);
+applyLang();
+send({ type: 'ready' });
+setTimeout(() => document.body.classList.remove('loading'), 1000); // fallback if prefs never arrive
+checkVersion();
+
+// Light sync so changes made by other designers show up.
+setInterval(() => { if (!dirty && !saving) send({ type: 'refresh' }); }, 3000);
+</script>
+</body>
+</html>
