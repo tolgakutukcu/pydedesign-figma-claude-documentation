@@ -131,6 +131,23 @@
   .chip button:hover { background: var(--figma-color-bg-hover); color: var(--figma-color-text); }
   .chips input { flex: 1; min-width: 80px; height: 22px; border: 0; outline: none; background: none; padding: 0 4px; }
 
+  .suggest {
+    position: fixed; z-index: 4; display: none; max-height: 220px; overflow-y: auto; padding: 4px;
+    border-radius: 9px; border: 1px solid var(--figma-color-border); background: var(--figma-color-bg);
+    box-shadow: 0 6px 24px rgba(0, 0, 0, .14);
+  }
+  .suggest.show { display: block; }
+  .sg-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    height: 28px; padding: 0 4px 0 8px; border-radius: 6px; cursor: pointer;
+  }
+  .sg-item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sg-item:hover, .sg-item.on { background: var(--figma-color-bg-hover); }
+  .sg-item button {
+    flex: none; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; cursor: pointer;
+    background: none; color: var(--figma-color-text-tertiary); display: grid; place-items: center;
+  }
+  .sg-item button:hover { background: var(--figma-color-bg-secondary); color: var(--danger); }
   .link-row { display: flex; gap: 4px; margin-bottom: 6px; }
   .link-row .input { flex: 1; }
   .add {
@@ -388,9 +405,7 @@
     </div>
   </footer>
 
-  <datalist id="people-design"></datalist>
-  <datalist id="people-dev"></datalist>
-  <datalist id="people-product"></datalist>
+  <div class="suggest" id="suggest"></div>
 
   <div class="confirm" id="confirm">
     <div class="box">
@@ -452,7 +467,7 @@
   </div>
 
 <script>
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const VERSION_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/version.json';
 
 const STRINGS = {
@@ -468,7 +483,8 @@ const STRINGS = {
     noSpec: 'No spec yet', status: 'Status', wip: 'In progress', review: 'In review', ready: 'Ready for dev',
     statusLong: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
     owners: 'Owners', design: 'Design', dev: 'Development', product: 'Product',
-    ownersHint: 'Type a name and press Enter. Suggestions come from the team list, owners used in this file and names you used before.',
+    ownersHint: 'Type a name and press Enter. Suggestions come from the team list, owners used in this file and names you used before. Use × in the list to remove a wrong name.',
+    forget: 'Remove from suggestions',
     jira: 'Jira links', slack: 'Slack threads', addJira: '+ Add Jira link', addSlack: '+ Add Slack thread',
     notes: 'Notes', notesPh: 'Anything developers (and Claude) should know: behaviour, interactions, rules, edge cases, decisions…',
     create: 'Add spec card', save: 'Save changes', saved: 'Saved', remove: 'Remove',
@@ -508,7 +524,8 @@ const STRINGS = {
     noSpec: 'Henüz spec yok', status: 'Durum', wip: 'Devam ediyor', review: 'İncelemede', ready: 'Dev’e hazır',
     statusLong: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
     owners: 'Sorumlular', design: 'Design', dev: 'Development', product: 'Product',
-    ownersHint: 'Bir isim yazıp Enter’a bas. Öneriler ekip listesinden, bu dosyada kullanılan sorumlulardan ve daha önce yazdığın isimlerden gelir.',
+    ownersHint: 'Bir isim yazıp Enter’a bas. Öneriler ekip listesinden, bu dosyada kullanılan sorumlulardan ve daha önce yazdığın isimlerden gelir. Yanlış bir ismi listedeki × ile kaldırabilirsin.',
+    forget: 'Önerilerden kaldır',
     jira: 'Jira linkleri', slack: 'Slack thread’leri', addJira: '+ Jira linki ekle', addSlack: '+ Slack thread’i ekle',
     notes: 'Notlar', notesPh: 'Developer’ların (ve Claude’un) bilmesi gerekenler: davranış, etkileşimler, kurallar, edge case’ler, kararlar…',
     create: 'Spec kartı ekle', save: 'Değişiklikleri kaydet', saved: 'Kaydedildi', remove: 'Kaldır',
@@ -582,22 +599,77 @@ async function loadTeam() {
 }
 
 // Each role gets its own suggestion list: people known for that role first, then everyone else.
+// Names from team.json can't be removed here (edit the file in the repo instead).
+function suggestionsFor(role) {
+  const first = [], rest = [];
+  const has = (n) => first.indexOf(n) !== -1 || rest.indexOf(n) !== -1;
+  const push = (arr, n) => { if (!has(n)) arr.push(n); };
+  team[role].forEach((n) => push(first, n));
+  filePeople.filter((p) => p.roles.indexOf(role) !== -1).forEach((p) => push(first, p.name));
+  ['design', 'dev', 'product'].forEach((r) => team[r].forEach((n) => push(rest, n)));
+  filePeople.forEach((p) => push(rest, p.name));
+  const inTeam = (n) => ['design', 'dev', 'product'].some((r) => team[r].indexOf(n) !== -1);
+  const fp = (n) => filePeople.find((p) => p.name === n);
+  return first.concat(rest.sort((a, b) => a.localeCompare(b))).map((name) => ({
+    name, removable: !inTeam(name) && !!fp(name) && fp(name).removable
+  }));
+}
+
 function renderPeople() {
-  ['design', 'dev', 'product'].forEach((role) => {
-    const first = [], rest = [];
-    const push = (arr, n) => { if (first.indexOf(n) === -1 && rest.indexOf(n) === -1) arr.push(n); };
-    team[role].forEach((n) => push(first, n));
-    filePeople.filter((p) => p.roles.indexOf(role) !== -1).forEach((p) => push(first, p.name));
-    ['design', 'dev', 'product'].forEach((r) => team[r].forEach((n) => push(rest, n)));
-    filePeople.forEach((p) => push(rest, p.name));
-    const dl = $('people-' + role);
-    dl.innerHTML = '';
-    first.concat(rest.sort((a, b) => a.localeCompare(b))).forEach((n) => {
-      const o = document.createElement('option');
-      o.value = n;
-      dl.append(o);
-    });
+  if (suggest.input) showSuggest(suggest.input, suggest.role, suggest.box, suggest.commit);
+}
+
+// ---------- Suggestion dropdown ----------
+// A custom list instead of <datalist>, so each name can have a remove button.
+const suggest = { input: null, role: null, box: null, commit: null, items: [], active: -1 };
+
+function hideSuggest() {
+  suggest.input = null;
+  suggest.active = -1;
+  $('suggest').classList.remove('show');
+}
+
+function showSuggest(input, role, box, commit) {
+  Object.assign(suggest, { input, role, box, commit });
+  const q = input.value.trim().toLocaleLowerCase('tr');
+  suggest.items = suggestionsFor(role)
+    .filter((p) => form.owners[role].indexOf(p.name) === -1)
+    .filter((p) => !q || p.name.toLocaleLowerCase('tr').indexOf(q) !== -1)
+    .slice(0, 8);
+  if (suggest.active >= suggest.items.length) suggest.active = suggest.items.length - 1;
+  const el = $('suggest');
+  el.innerHTML = '';
+  if (!suggest.items.length) return el.classList.remove('show');
+  suggest.items.forEach((p, i) => {
+    const row = document.createElement('div');
+    row.className = 'sg-item' + (i === suggest.active ? ' on' : '');
+    const name = document.createElement('span');
+    name.textContent = p.name;
+    row.append(name);
+    // mousedown + preventDefault keeps focus in the input, so blur doesn't close the list first.
+    row.onmousedown = (e) => { e.preventDefault(); input.value = p.name; commit(true); };
+    if (p.removable) {
+      const x = document.createElement('button');
+      x.innerHTML = X;
+      x.title = t().forget;
+      x.onmousedown = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        filePeople = filePeople.filter((f) => f.name !== p.name);
+        send({ type: 'forgetPerson', name: p.name });
+        showSuggest(input, role, box, commit);
+      };
+      row.append(x);
+    }
+    el.append(row);
   });
+  const r = box.getBoundingClientRect();
+  el.style.left = r.left + 'px';
+  el.style.width = r.width + 'px';
+  el.classList.add('show');
+  // Open upwards when there isn't enough room below.
+  const below = window.innerHeight - r.bottom - 8;
+  el.style.top = (below < el.offsetHeight && r.top > el.offsetHeight ? r.top - el.offsetHeight - 4 : r.bottom + 4) + 'px';
 }
 
 function emptyForm(me) {
@@ -647,7 +719,6 @@ function renderChips() {
       box.append(c);
     });
     const input = document.createElement('input');
-    input.setAttribute('list', 'people-' + role);
     const commit = (refocus) => {
       const v = input.value.trim().replace(/,$/, '').trim();
       if (v && form.owners[role].indexOf(v) === -1) { form.owners[role].push(v); markDirty(); }
@@ -656,18 +727,30 @@ function renderChips() {
       if (refocus) box.querySelector('input').focus();
     };
     input.onkeydown = (e) => {
-      if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); commit(true); }
+      const open = suggest.input === input && suggest.items.length;
+      if (open && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        e.preventDefault();
+        const n = suggest.items.length;
+        suggest.active = e.key === 'ArrowDown' ? (suggest.active + 1) % n : (suggest.active - 1 + n) % n;
+        showSuggest(input, role, box, commit);
+      } else if (e.key === 'Escape' && open) {
+        e.preventDefault();
+        hideSuggest();
+      } else if (e.key === 'Enter' || e.key === ',') {
+        e.preventDefault();
+        if (open && suggest.active >= 0) input.value = suggest.items[suggest.active].name;
+        commit(true);
+      }
       else if (e.key === 'Backspace' && !input.value && form.owners[role].length) {
         form.owners[role].pop(); markDirty(); renderChips(); box.querySelector('input').focus();
       }
     };
-    // Picking a suggestion from the datalist fires `input` with the full name.
-    input.oninput = (e) => {
-      if (!e.inputType || e.inputType === 'insertReplacementText') {
-        if (Array.from($('people-' + role).options).some((o) => o.value === input.value)) commit(true);
-      }
+    input.oninput = () => { suggest.active = -1; showSuggest(input, role, box, commit); };
+    input.onfocus = () => showSuggest(input, role, box, commit);
+    input.onblur = () => {
+      if (suggest.input === input) hideSuggest();
+      if (input.value.trim()) commit(false);
     };
-    input.onblur = () => { if (input.value.trim()) commit(false); };
     box.onclick = () => input.focus();
     box.append(input);
     if (keepFocus) input.focus();
@@ -923,6 +1006,7 @@ document.querySelectorAll('[data-add]').forEach((b) => {
     inputs[inputs.length - 1].focus();
   };
 });
+document.querySelector('main').addEventListener('scroll', () => { if (suggest.input) suggest.input.blur(); });
 $('notes').oninput = () => { form.notes = $('notes').value; markDirty(); };
 $('save').onclick = save;
 $('discard').onclick = () => { dirty = false; editing = null; render(lastState); send({ type: 'refresh' }); };

@@ -446,7 +446,6 @@ async function rescanPage(page) {
     if (!data) continue;
     found.add(n.id);
     writeIndex(n, data);
-    registerPeople(data);
   }
   for (const e of readIndex()) {
     if (e.pageId === page.id && !found.has(e.id)) removeIndex(e.id);
@@ -562,9 +561,22 @@ async function people() {
   }
   const saved = await figma.clientStorage.getAsync(PEOPLE_KEY);
   if (Array.isArray(saved)) saved.forEach((p) => typeof p === 'string' ? add(p) : add(p.name, p.roles));
-  try { figma.activeUsers.forEach((u) => add(u.name)); } catch (e) {}
-  if (figma.currentUser) add(figma.currentUser.name);
-  return Object.keys(map).sort((a, b) => a.localeCompare(b)).map((name) => ({ name, roles: map[name] }));
+  // Stored names can be removed from the suggestions; people who are here right now can't
+  // (they would come straight back).
+  const present = new Set();
+  try { figma.activeUsers.forEach((u) => u.name && present.add(u.name)); } catch (e) {}
+  if (figma.currentUser) present.add(figma.currentUser.name);
+  present.forEach((n) => add(n));
+  return Object.keys(map).sort((a, b) => a.localeCompare(b))
+    .map((name) => ({ name, roles: map[name], removable: !present.has(name) }));
+}
+
+// Removes a name from the suggestions (file list and this user's local list).
+// Specs that already list the person are left untouched.
+async function forgetPerson(name) {
+  figma.root.setSharedPluginData(NS, PERSON_PREFIX + name, '');
+  const saved = (await figma.clientStorage.getAsync(PEOPLE_KEY)) || [];
+  await figma.clientStorage.setAsync(PEOPLE_KEY, saved.filter((p) => (typeof p === 'string' ? p : p.name) !== name));
 }
 
 async function rememberPeople(data) {
@@ -699,8 +711,6 @@ figma.ui.onmessage = async (msg) => {
       const saved = await figma.clientStorage.getAsync(LANG_KEY);
       if (saved === 'en' || saved === 'tr') lang = saved;
       figma.ui.postMessage({ type: 'prefs', lang });
-      // Picks up owners from specs saved before people were tracked (indexed lookup, cheap).
-      try { await rescanPage(figma.currentPage); } catch (e) {}
       await sendPeople();
       return pushState(true);
     }
@@ -723,6 +733,7 @@ figma.ui.onmessage = async (msg) => {
       return sendOverview();
     }
     if (msg.type === 'goto') return goTo(msg.id);
+    if (msg.type === 'forgetPerson') { await forgetPerson(String(msg.name)); return sendPeople(); }
   } catch (e) {
     figma.notify(t('Something went wrong: ', 'Bir hata oluştu: ') + (e && e.message ? e.message : e), { error: true });
     figma.ui.postMessage({ type: 'error' });
