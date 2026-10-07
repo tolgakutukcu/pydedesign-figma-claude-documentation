@@ -272,7 +272,7 @@ function renderCard(card, target, data) {
   const st = STATUSES[data.status];
   for (const c of card.children.slice()) c.remove();
 
-  card.name = '📋 Design Spec — ' + target.name;
+  card.name = '📋 Design Spec — ' + baseName(target);
   card.layoutMode = 'VERTICAL';
   card.primaryAxisSizingMode = 'AUTO';
   card.counterAxisSizingMode = 'FIXED';
@@ -303,7 +303,7 @@ function renderCard(card, target, data) {
   put(pill, text(st.label, 'bold', 12, '#FFFFFF', 'Status label'));
 
   const titles = put(card, stack('Title', 'VERTICAL', 6), true);
-  put(titles, text(target.name, 'bold', 22, 'text', 'Name'), true);
+  put(titles, text(baseName(target), 'bold', 22, 'text', 'Name'), true);
   put(titles, text(
     'Documents the ' + (target.type === 'SECTION' ? 'section this card sits in' : 'screen next to this card') +
     '. Developers and AI agents (e.g. Claude): read this card before implementing the design.',
@@ -397,13 +397,16 @@ function setRelaunch(target, card, data) {
   if (card) card.setRelaunchData(d);
 }
 
-// Mirrors "Ready for development" to Figma's native Dev Mode status. Only clears the native
-// status if it was "Ready for dev", so a status set by hand for another reason is kept.
-function syncDevStatus(target, status) {
-  try {
-    if (status === 'ready') target.devStatus = { type: 'READY_FOR_DEV' };
-    else if (target.devStatus && target.devStatus.type === 'READY_FOR_DEV') target.devStatus = null;
-  } catch (e) {}
+// A Ready target gets this prefix in its layer name, so its status is visible on the canvas,
+// in the layers panel and to anyone reading the file through Figma MCP.
+const READY_PREFIX = '✅ Ready · ';
+
+function baseName(node) {
+  return node.name.indexOf(READY_PREFIX) === 0 ? node.name.slice(READY_PREFIX.length) : node.name;
+}
+function syncName(target, status) {
+  const name = (status === 'ready' ? READY_PREFIX : '') + baseName(target);
+  if (target.name !== name) target.name = name;
 }
 
 // ---------- Overview index ----------
@@ -412,7 +415,7 @@ function syncDevStatus(target, status) {
 function writeIndex(target, data) {
   const p = pageOf(target);
   figma.root.setSharedPluginData(NS, IDX_PREFIX + target.id, JSON.stringify({
-    id: target.id, name: target.name, kind: target.type === 'SECTION' ? 'Section' : 'Frame',
+    id: target.id, name: baseName(target), kind: target.type === 'SECTION' ? 'Section' : 'Frame',
     pageId: p ? p.id : null, pageName: p ? p.name : '',
     status: data.status, changed: !!(data.status === 'ready' && data.changed), by: data.by, at: data.at
   }));
@@ -504,7 +507,7 @@ async function pushState(check) {
     status: 'ok',
     target: {
       id: t.id,
-      name: t.name,
+      name: baseName(t),
       kind: t.type === 'SECTION' ? 'Section' : 'Frame',
       section: t.parent && t.parent.type === 'SECTION' ? t.parent.name : null,
       page: p ? p.name : ''
@@ -653,7 +656,7 @@ async function save(msg) {
   data.cardId = card.id;
   writeSpec(node, data);
   setRelaunch(node, card, data);
-  syncDevStatus(node, data.status);
+  syncName(node, data.status);
   writeIndex(node, data);
   registerPeople(data);
   await rememberPeople(data);
@@ -687,7 +690,7 @@ async function remove(msg) {
   if (card) card.remove();
   node.setSharedPluginData(NS, KEY, '');
   node.setRelaunchData({});
-  syncDevStatus(node, null);
+  syncName(node, null);
   removeIndex(node.id);
   figma.notify(t('Design spec removed', 'Design spec kaldırıldı'));
 }

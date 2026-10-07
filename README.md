@@ -27,7 +27,7 @@ Don't edit the card's text by hand — it is regenerated from the form on every 
 
 ### Ready for development
 
-- Marking a spec **Ready for development** also sets Figma's native Dev Mode "Ready for dev" status on the section/frame.
+- Marking a spec **Ready for development** renames the section/frame to `✅ Ready · <name>`. Moving it back to another status (or removing the spec) removes the prefix. The prefix is set in `READY_PREFIX` in `code.js`.
 - At that moment the plugin stores a fingerprint of the design. When someone later opens the plugin on that section and the design has changed, the plugin and the card show a warning: *"The design changed after it was marked Ready for development"*. From the warning you can **accept the changes** (keep Ready, new baseline) or **move it to In review**.
 - Detection runs only when the plugin is open and the section is selected, so it doesn't slow down large files.
 
