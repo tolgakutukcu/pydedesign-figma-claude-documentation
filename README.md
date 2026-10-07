@@ -25,11 +25,20 @@ The card looks like a sticky note whose color follows the status (yellow = in pr
 
 Don't edit the card's text by hand — it is regenerated from the form on every save.
 
+### Status in the layer name
+
+The section/frame name shows its status after an em dash, updated on every save:
+
+- `Checkout Flow — 🚧 Work in progress`
+- `Checkout Flow — 👀 In review`
+- `Checkout Flow — ✅ Ready for development`
+
+Removing the spec removes the suffix. Labels and emojis are in `STATUSES` in `code.js`.
+
 ### Ready for development
 
-- Marking a spec **Ready for development** renames the section/frame to `✅ Ready · <name>`. Moving it back to another status (or removing the spec) removes the prefix. The prefix is set in `READY_PREFIX` in `code.js`.
 - At that moment the plugin stores a fingerprint of the design. When someone later opens the plugin on that section and the design has changed, the plugin and the card show a warning: *"The design changed after it was marked Ready for development"*. From the warning you can **accept the changes** (keep Ready, new baseline) or **move it to In review**.
-- Detection runs only when the plugin is open and the section is selected, so it doesn't slow down large files.
+- Detection runs only when the plugin is open and the section is selected. It runs in small chunks in the background (the plugin shows "Checking for design changes…"), so Figma stays responsive on large sections, and it stops if you select something else.
 
 ### Overview
 

@@ -15,10 +15,11 @@ figma.skipInvisibleInstanceChildren = true; // keeps change detection fast in bi
 figma.showUI(__html__, { width: 360, height: 640, themeColors: true });
 
 // `color` is the status pill, `sticky` the note's paper color (FigJam-like sticky tones).
+// `emoji` goes into the target's layer name (see syncName).
 const STATUSES = {
-  wip: { label: 'Work in progress', color: '#D97706', sticky: '#FFEFA6' },
-  review: { label: 'In review', color: '#7C5CFF', sticky: '#E6DDFF' },
-  ready: { label: 'Ready for development', color: '#14A367', sticky: '#C9F2DA' }
+  wip: { label: 'Work in progress', emoji: '🚧', color: '#D97706', sticky: '#FFEFA6' },
+  review: { label: 'In review', emoji: '👀', color: '#7C5CFF', sticky: '#E6DDFF' },
+  ready: { label: 'Ready for development', emoji: '✅', color: '#14A367', sticky: '#C9F2DA' }
 };
 
 // ---------- Helpers ----------
@@ -168,7 +169,14 @@ function addProps(h, n) {
 // Fingerprint of everything inside the target, except spec cards. The target's own position
 // (and a section's size, which grows to fit the card) is left out on purpose: moving a section
 // around the canvas isn't a design change.
-function hashTarget(target) {
+//
+// Reading node properties is slow on big sections, so the walk yields back to Figma every
+// few milliseconds; otherwise Figma freezes until it's done. Passing a `token` makes the walk
+// cancellable: it returns null as soon as a newer check has started (see startChangeCheck).
+const yieldToFigma = () => new Promise((r) => setTimeout(r, 0));
+let checkToken = 0;
+
+async function hashTarget(target, token) {
   const h = makeHasher();
   h.add(target.type);
   if (target.type === 'FRAME') {
@@ -176,8 +184,16 @@ function hashTarget(target) {
     addProps(h, target);
   }
   const stack = target.children.filter((c) => !isCard(c)).reverse();
+  let last = Date.now();
   while (stack.length) {
+    if (Date.now() - last > 12) {
+      await yieldToFigma();
+      if (token !== undefined && token !== checkToken) return null;
+      if (target.removed) return null;
+      last = Date.now();
+    }
     const n = stack.pop();
+    if (n.removed) continue; // deleted while we were yielding
     h.add(n.type); h.add(n.name);
     h.add(round(n.x)); h.add(round(n.y)); h.add(round(n.width)); h.add(round(n.height));
     addProps(h, n);
@@ -397,15 +413,26 @@ function setRelaunch(target, card, data) {
   if (card) card.setRelaunchData(d);
 }
 
-// A Ready target gets this prefix in its layer name, so its status is visible on the canvas,
-// in the layers panel and to anyone reading the file through Figma MCP.
-const READY_PREFIX = '✅ Ready · ';
+// The target's layer name shows its status after an em dash, e.g. "Checkout Flow — ✅ Ready for development",
+// so the status is visible on the canvas, in the layers panel and to anyone reading the file via Figma MCP.
+const NAME_SEP = ' — ';
+const LEGACY_READY_PREFIX = '✅ Ready · '; // used by v1.3.0
 
-function baseName(node) {
-  return node.name.indexOf(READY_PREFIX) === 0 ? node.name.slice(READY_PREFIX.length) : node.name;
+function statusSuffix(status) {
+  return NAME_SEP + STATUSES[status].emoji + ' ' + STATUSES[status].label;
 }
+function baseName(node) {
+  let name = node.name;
+  if (name.indexOf(LEGACY_READY_PREFIX) === 0) name = name.slice(LEGACY_READY_PREFIX.length);
+  for (const k of Object.keys(STATUSES)) {
+    const suffix = statusSuffix(k);
+    if (name.length > suffix.length && name.slice(-suffix.length) === suffix) return name.slice(0, -suffix.length);
+  }
+  return name;
+}
+// `status` null removes the suffix (spec removed).
 function syncName(target, status) {
-  const name = (status === 'ready' ? READY_PREFIX : '') + baseName(target);
+  const name = baseName(target) + (status ? statusSuffix(status) : '');
   if (target.name !== name) target.name = name;
 }
 
@@ -477,6 +504,7 @@ async function pushState(check) {
   }
   if (seq !== pushSeq) return;
 
+  if (check) checkToken++; // selection changed: cancel a change check that is still running
   if (targets.length !== 1) {
     lastCheckedId = null;
     figma.ui.postMessage({ type: 'state', status: targets.length ? 'multiple' : 'none', count: targets.length });
@@ -484,22 +512,7 @@ async function pushState(check) {
   }
 
   const t = targets[0];
-  let data = readSpec(t);
-  if (check && data && t.id !== lastCheckedId && data.status === 'ready' && data.ready && data.ready.hash && !data.changed) {
-    if (hashTarget(t) !== data.ready.hash) {
-      data.changed = { at: Date.now() };
-      writeSpec(t, data);
-      await ensureFonts();
-      const card = await findCard(t, data);
-      if (card) {
-        renderCard(card, t, data);
-        if (card.parent && card.parent.type === 'SECTION') fitSection(card.parent, card);
-      }
-      writeIndex(t, data);
-    }
-  }
-  if (check) lastCheckedId = t.id;
-  if (seq !== pushSeq) return;
+  const data = readSpec(t);
 
   const p = pageOf(t);
   figma.ui.postMessage({
@@ -515,6 +528,35 @@ async function pushState(check) {
     spec: data,
     me: userName()
   });
+  if (check && t.id !== lastCheckedId && needsCheck(data)) startChangeCheck(t);
+}
+
+function needsCheck(data) {
+  return !!(data && data.status === 'ready' && data.ready && data.ready.hash && !data.changed);
+}
+
+// Compares a Ready target with its snapshot in the background. The UI shows a small
+// "checking" hint meanwhile; the check is dropped if the selection changes.
+async function startChangeCheck(t) {
+  const token = ++checkToken;
+  figma.ui.postMessage({ type: 'checking', id: t.id, token, on: true });
+  let hash = null;
+  try { hash = await hashTarget(t, token); } catch (e) {}
+  figma.ui.postMessage({ type: 'checking', id: t.id, token, on: false });
+  if (hash === null || t.removed) return;
+  lastCheckedId = t.id;
+  const data = readSpec(t); // re-read: someone may have saved meanwhile
+  if (!needsCheck(data) || hash === data.ready.hash) return;
+  data.changed = { at: Date.now() };
+  writeSpec(t, data);
+  await ensureFonts();
+  const card = await findCard(t, data);
+  if (card) {
+    renderCard(card, t, data);
+    if (card.parent && card.parent.type === 'SECTION') fitSection(card.parent, card);
+  }
+  writeIndex(t, data);
+  pushState(false);
 }
 
 figma.on('selectionchange', () => pushState(true));
@@ -648,7 +690,7 @@ async function save(msg) {
       data.ready = old.ready;
       data.changed = old.changed;
     } else {
-      data.ready = { hash: hashTarget(node), at: now, by: data.by };
+      data.ready = { hash: await hashTarget(node), at: now, by: data.by };
     }
   }
   await ensureFonts();
@@ -671,7 +713,7 @@ async function resnapshot(msg) {
   if (!node) return;
   const data = readSpec(node);
   if (!data || data.status !== 'ready') return;
-  data.ready = { hash: hashTarget(node), at: Date.now(), by: userName() };
+  data.ready = { hash: await hashTarget(node), at: Date.now(), by: userName() };
   data.changed = null;
   await ensureFonts();
   const card = await upsertCard(node, data);
@@ -725,7 +767,11 @@ figma.ui.onmessage = async (msg) => {
       return;
     }
     if (msg.type === 'refresh') return pushState(false);
-    if (msg.type === 'save') { await save(msg); return pushState(false); }
+    if (msg.type === 'save') {
+      await save(msg);
+      figma.ui.postMessage({ type: 'saved' });
+      return pushState(false);
+    }
     if (msg.type === 'resnapshot') { await resnapshot(msg); return pushState(false); }
     if (msg.type === 'remove') { await remove(msg); return pushState(false); }
     if (msg.type === 'overview') return sendOverview();

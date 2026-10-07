@@ -82,6 +82,12 @@
   .banner .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   .banner.info { background: var(--accent-soft); color: var(--figma-color-text); }
 
+  .checking { display: none; align-items: center; gap: 8px; margin-top: 8px; font-size: 11px; color: var(--figma-color-text-secondary); }
+  .checking.show { display: flex; }
+  .checking i {
+    width: 10px; height: 10px; border-radius: 50%; flex: none;
+    border: 2px solid var(--figma-color-bg-secondary); border-top-color: var(--accent); animation: spin .8s linear infinite;
+  }
   .field { margin-top: 16px; }
   .lbl { font-size: 11px; font-weight: 600; color: var(--figma-color-text-secondary); margin-bottom: 6px; }
   .hint { font-size: 11px; color: var(--figma-color-text-tertiary); margin-top: 4px; }
@@ -334,6 +340,8 @@
           <span class="badge" id="badge"></span>
         </div>
 
+        <div class="checking" id="checking"><i></i><span data-i18n="checking"></span></div>
+
         <div class="banner info" id="staleBanner">
           <b data-i18n="staleTitle"></b>
           <span id="staleText"></span>
@@ -467,7 +475,7 @@
   </div>
 
 <script>
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const VERSION_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/version.json';
 
 const STRINGS = {
@@ -494,6 +502,7 @@ const STRINGS = {
     staleTitle: 'Selection changed',
     staleText: (n) => 'You have unsaved changes for “' + n + '”. Saving writes to that one.',
     discard: 'Discard changes',
+    checking: 'Checking for design changes since Ready…',
     changedTitle: 'Design changed after Ready',
     changedText: (d) => 'This design no longer matches the version marked Ready for development (detected ' + d + '). The card on the canvas shows a warning.',
     accept: 'Accept changes, keep Ready', toReview: 'Move to In review',
@@ -535,6 +544,7 @@ const STRINGS = {
     staleTitle: 'Seçim değişti',
     staleText: (n) => '“' + n + '” için kaydedilmemiş değişikliklerin var. Kaydedersen oraya yazılır.',
     discard: 'Değişiklikleri at',
+    checking: 'Ready’den sonraki tasarım değişiklikleri kontrol ediliyor…',
     changedTitle: 'Ready’den sonra tasarım değişti',
     changedText: (d) => 'Bu tasarım, Ready for development olarak işaretlenen hâlinden farklı (' + d + ' tespit edildi). Canvas’taki kartta uyarı gösteriliyor.',
     accept: 'Değişiklikleri onayla, Ready kalsın', toReview: 'In review’a al',
@@ -577,6 +587,7 @@ let form = null;
 let editing = null; // { id, name, hasSpec, spec }
 let dirty = false;
 let saving = false;
+let checking = null; // { id, token } while code.js compares a Ready design with its snapshot
 
 function send(m) { parent.postMessage({ pluginMessage: m }, '*'); }
 
@@ -840,6 +851,11 @@ function render(m) {
   $('changedBanner').classList.toggle('show', !!changed);
   if (changed) $('changedText').textContent = t().changedText(new Date(m.spec.changed.at).toLocaleString(t().dateLocale));
   renderFooter();
+  renderChecking();
+}
+
+function renderChecking() {
+  $('checking').classList.toggle('show', !!(checking && editing && checking.id === editing.id));
 }
 
 function collect() {
@@ -1040,8 +1056,16 @@ onmessage = (e) => {
     applyLang();
     document.body.classList.remove('loading');
   } else if (m.type === 'state') {
-    if (saving) { saving = false; dirty = false; }
+    // While saving, keep the form as it is; the state that follows 'saved' fills it in.
+    if (saving) { lastState = m; return; }
     render(m);
+  } else if (m.type === 'saved') {
+    saving = false;
+    dirty = false;
+  } else if (m.type === 'checking') {
+    if (m.on) checking = { id: m.id, token: m.token };
+    else if (checking && checking.token === m.token) checking = null;
+    renderChecking();
   } else if (m.type === 'people') {
     filePeople = m.people || [];
     renderPeople();
