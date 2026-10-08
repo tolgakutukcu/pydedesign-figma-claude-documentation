@@ -39,9 +39,9 @@ function pageOf(node) {
   return n;
 }
 function pad(n) { return (n < 10 ? '0' : '') + n; }
-function fmtDate(ts) {
+function fmtDate(ts, L) {
   const d = new Date(ts);
-  const M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const M = L.months;
   return d.getDate() + ' ' + M[d.getMonth()] + ' ' + d.getFullYear() + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 
@@ -178,19 +178,19 @@ function heading(parent, label) {
 function row(parent, label, value, empty) {
   const r = put(parent, stack(label, 'HORIZONTAL', 12), true);
   const l = put(r, text(label, 'medium', 13, 'secondary', 'Label'));
-  l.resize(104, l.height);
+  l.resize(128, l.height);
   l.textAutoResize = 'HEIGHT';
   put(r, text(value || empty, 'regular', 13, value ? 'text' : 'tertiary', 'Value'), true);
 }
 
-function links(parent, label, urls) {
+function links(parent, label, urls, none) {
   const r = put(parent, stack(label, 'HORIZONTAL', 12), true);
   const l = put(r, text(label, 'medium', 13, 'secondary', 'Label'));
-  l.resize(104, l.height);
+  l.resize(128, l.height);
   l.textAutoResize = 'HEIGHT';
   const col = put(r, stack('Links', 'VERTICAL', 4), true);
   if (!urls.length) {
-    put(col, text('None', 'regular', 13, 'tertiary', 'Value'), true);
+    put(col, text(none, 'regular', 13, 'tertiary', 'Value'), true);
     return;
   }
   for (const url of urls) {
@@ -202,8 +202,46 @@ function links(parent, label, urls) {
   }
 }
 
+// Text on the card, per card language. The card's own layer name stays in English in every
+// language, so the "📋 Design Spec — …" name developers tell Claude to look for never changes.
+const CARD_TEXT = {
+  en: {
+    eyebrow: '📋 DESIGN SPEC',
+    status: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
+    about: (isSection) => 'Documents the ' + (isSection ? 'section this card sits in' : 'screen next to this card') +
+      '. Developers and AI agents (e.g. Claude): read this card before implementing the design.',
+    hStatus: 'Status', hOwners: 'Owners', hLinks: 'Links', hNotes: 'Notes',
+    rStatus: 'Status', readySince: 'Ready since',
+    design: 'Design', dev: 'Development', product: 'Product', notAssigned: 'Not assigned',
+    none: 'None', noNotes: 'No notes.',
+    updated: (by, date) => 'Last updated by ' + by + ' · ' + date,
+    months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  },
+  tr: {
+    eyebrow: '📋 TASARIM SPEC',
+    status: { wip: 'Devam ediyor', review: 'İncelemede', ready: 'Geliştirmeye hazır' },
+    about: (isSection) => (isSection ? 'Bu kartın içinde bulunduğu section’ı' : 'Bu kartın yanındaki ekranı') +
+      ' belgeler. Geliştiriciler ve yapay zekâ asistanları (ör. Claude): tasarımı geliştirmeden önce bu kartı okuyun.',
+    hStatus: 'Durum', hOwners: 'Sorumlular', hLinks: 'Linkler', hNotes: 'Notlar',
+    rStatus: 'Durum', readySince: 'Hazır olduğu tarih',
+    design: 'Tasarım', dev: 'Geliştirme', product: 'Ürün', notAssigned: 'Atanmadı',
+    none: 'Yok', noNotes: 'Not yok.',
+    updated: (by, date) => 'Son güncelleyen: ' + by + ' · ' + date,
+    months: ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
+  }
+};
+
+// The card language is a file setting (stored on the document), so every card in a file
+// is in the same language no matter who saves it.
+const CARD_LANG_KEY = 'cardLang';
+function cardLang() {
+  const v = figma.root.getSharedPluginData(NS, CARD_LANG_KEY);
+  return CARD_TEXT[v] ? v : 'en';
+}
+
 function renderCard(card, target, data) {
   const st = STATUSES[data.status];
+  const L = CARD_TEXT[cardLang()];
   for (const c of card.children.slice()) c.remove();
 
   card.name = '📋 Design Spec — ' + baseName(target);
@@ -228,49 +266,46 @@ function renderCard(card, target, data) {
   const top = put(card, stack('Header', 'HORIZONTAL', 12), true);
   top.primaryAxisAlignItems = 'SPACE_BETWEEN';
   top.counterAxisAlignItems = 'CENTER';
-  put(top, text('📋 DESIGN SPEC', 'bold', 12, 'secondary', 'Eyebrow'));
+  put(top, text(L.eyebrow, 'bold', 12, 'secondary', 'Eyebrow'));
   const pill = put(top, stack('Status', 'HORIZONTAL', 0));
   pill.paddingTop = pill.paddingBottom = 5;
   pill.paddingLeft = pill.paddingRight = 12;
   pill.cornerRadius = 999;
   pill.fills = [solid(st.color)];
-  put(pill, text(st.label, 'bold', 12, '#FFFFFF', 'Status label'));
+  put(pill, text(L.status[data.status], 'bold', 12, '#FFFFFF', 'Status label'));
 
   const titles = put(card, stack('Title', 'VERTICAL', 6), true);
   put(titles, text(baseName(target), 'bold', 22, 'text', 'Name'), true);
-  put(titles, text(
-    'Documents the ' + (target.type === 'SECTION' ? 'section this card sits in' : 'screen next to this card') +
-    '. Developers and AI agents (e.g. Claude): read this card before implementing the design.',
-    'regular', 12, 'secondary', 'About'), true);
+  put(titles, text(L.about(target.type === 'SECTION'), 'regular', 12, 'secondary', 'About'), true);
 
   const status = put(card, stack('Status details', 'VERTICAL', 8), true);
-  heading(status, 'Status');
-  row(status, 'Status', st.label, '');
+  heading(status, L.hStatus);
+  row(status, L.rStatus, L.status[data.status], '');
   if (data.status === 'ready' && data.ready) {
-    row(status, 'Ready since', fmtDate(data.ready.at) + ' · ' + data.ready.by, '');
+    row(status, L.readySince, fmtDate(data.ready.at, L) + ' · ' + data.ready.by, '');
   }
 
   const owners = put(card, stack('Owners', 'VERTICAL', 8), true);
-  heading(owners, 'Owners');
-  row(owners, 'Design', data.owners.design.join(', '), 'Not assigned');
-  row(owners, 'Development', data.owners.dev.join(', '), 'Not assigned');
-  row(owners, 'Product', data.owners.product.join(', '), 'Not assigned');
+  heading(owners, L.hOwners);
+  row(owners, L.design, data.owners.design.join(', '), L.notAssigned);
+  row(owners, L.dev, data.owners.dev.join(', '), L.notAssigned);
+  row(owners, L.product, data.owners.product.join(', '), L.notAssigned);
 
   const ls = put(card, stack('Links', 'VERTICAL', 8), true);
-  heading(ls, 'Links');
-  links(ls, 'Jira', data.jira);
-  links(ls, 'Slack', data.slack);
+  heading(ls, L.hLinks);
+  links(ls, 'Jira', data.jira, L.none);
+  links(ls, 'Slack', data.slack, L.none);
 
   const notes = put(card, stack('Notes', 'VERTICAL', 8), true);
-  heading(notes, 'Notes');
-  put(notes, text(data.notes.trim() || 'No notes.', 'regular', 14, data.notes.trim() ? 'text' : 'tertiary', 'Notes'), true);
+  heading(notes, L.hNotes);
+  put(notes, text(data.notes.trim() || L.noNotes, 'regular', 14, data.notes.trim() ? 'text' : 'tertiary', 'Notes'), true);
 
   const line = figma.createRectangle();
   line.name = 'Divider';
   line.resize(10, 1);
   line.fills = [solid('#1E1E1E', 0.12)];
   put(card, line, true);
-  put(card, text('Last updated by ' + data.by + ' · ' + fmtDate(data.at), 'regular', 11, 'tertiary', 'Last updated'), true);
+  put(card, text(L.updated(data.by, fmtDate(data.at, L)), 'regular', 11, 'tertiary', 'Last updated'), true);
 }
 
 const CARD_INSET = 96; // a section card sits this far from the section's left and top edges
@@ -408,6 +443,23 @@ async function rescanPage(page) {
   for (const e of readIndex()) {
     if (e.pageId === page.id && !found.has(e.id)) removeIndex(e.id);
   }
+}
+
+// Re-renders every card in the file in the current card language. Uses the overview index,
+// so other pages don't have to be loaded in full.
+async function rerenderCards() {
+  await ensureFonts();
+  await rescanPage(figma.currentPage);
+  let count = 0;
+  for (const e of readIndex()) {
+    const node = await figma.getNodeByIdAsync(e.id);
+    if (!node || node.removed || !isValidTarget(node)) continue;
+    const data = readSpec(node);
+    if (!data || !(await findCard(node, data))) continue;
+    await upsertCard(node, data);
+    count++;
+  }
+  return count;
 }
 
 async function sendOverview() {
@@ -624,7 +676,7 @@ figma.ui.onmessage = async (msg) => {
     if (msg.type === 'ready') {
       const saved = await figma.clientStorage.getAsync(LANG_KEY);
       if (saved === 'en' || saved === 'tr') lang = saved;
-      figma.ui.postMessage({ type: 'prefs', lang });
+      figma.ui.postMessage({ type: 'prefs', lang, cardLang: cardLang() });
       await sendPeople();
       return pushState();
     }
@@ -650,6 +702,14 @@ figma.ui.onmessage = async (msg) => {
       return sendOverview();
     }
     if (msg.type === 'goto') return goTo(msg.id);
+    if (msg.type === 'setCardLang') {
+      if (!CARD_TEXT[msg.lang] || msg.lang === cardLang()) return;
+      figma.root.setSharedPluginData(NS, CARD_LANG_KEY, msg.lang);
+      const n = await rerenderCards();
+      figma.ui.postMessage({ type: 'cardLang', cardLang: cardLang() });
+      figma.notify(t(n + ' card(s) updated', n + ' kart güncellendi'));
+      return;
+    }
     if (msg.type === 'forgetPerson') { await forgetPerson(String(msg.name)); return sendPeople(); }
   } catch (e) {
     figma.notify(t('Something went wrong: ', 'Bir hata oluştu: ') + (e && e.message ? e.message : e), { error: true });
