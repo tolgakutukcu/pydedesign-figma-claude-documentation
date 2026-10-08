@@ -93,10 +93,10 @@
   }
   .seg button {
     flex: 1; font-weight: 500; padding: 7px 4px; border: 0; border-radius: 7px; cursor: pointer;
-    background: transparent; color: var(--figma-color-text-secondary); transition: all .15s;
+    background: transparent; color: var(--figma-color-text); transition: all .15s;
     display: flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap;
   }
-  .seg button:hover { color: var(--figma-color-text); }
+  .seg button:not(.on):hover { background: var(--figma-color-bg-hover); }
   .seg button.on { color: #fff; font-weight: 600; }
   .seg button[data-status="wip"].on { background: var(--wip); }
   .seg button[data-status="review"].on { background: var(--review); }
@@ -149,7 +149,7 @@
   .link-row { display: flex; gap: 4px; margin-bottom: 6px; }
   .link-row .input { flex: 1; }
   .add {
-    border: 1px dashed var(--figma-color-border-strong); background: none; border-radius: 8px; cursor: pointer;
+    border: 1px dashed var(--figma-color-border); background: none; border-radius: 8px; cursor: pointer;
     padding: 6px 10px; color: var(--figma-color-text-secondary); font-weight: 500; width: 100%; text-align: left;
   }
   .add:hover { color: var(--figma-color-text); background: var(--figma-color-bg-hover); }
@@ -334,7 +334,10 @@
         <div class="banner info" id="staleBanner">
           <b data-i18n="staleTitle"></b>
           <span id="staleText"></span>
-          <div class="actions"><button class="btn small" id="discard" data-i18n="discard"></button></div>
+          <div class="actions">
+            <button class="btn small" id="goBack"></button>
+            <button class="btn small" id="discard" data-i18n="discard"></button>
+          </div>
         </div>
 
         <div class="field">
@@ -455,7 +458,7 @@
   </div>
 
 <script>
-const VERSION = '2.0.1';
+const VERSION = '2.0.2';
 const VERSION_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/version.json';
 
 const STRINGS = {
@@ -481,8 +484,9 @@ const STRINGS = {
     removeTitle: 'Remove this ReadMe?', removeText: 'The card on the canvas and the saved ReadMe data will be deleted. You can undo with ⌘Z / Ctrl+Z in Figma.',
     cancel: 'Cancel',
     lastUpdated: 'Last updated: ', notSaved: 'Not saved yet', unsaved: 'Unsaved changes',
-    staleTitle: 'Selection changed',
-    staleText: (n) => 'You have unsaved changes for “' + n + '”. Saving writes to that one.',
+    staleTitle: 'Unsaved changes',
+    staleText: (n) => 'You left “' + n + '” without saving. Go back to it, or discard the changes. Saving here still writes to “' + n + '”.',
+    goBack: (n) => 'Go back to “' + n + '”',
     discard: 'Discard changes',
     justNow: 'just now', minAgo: ' min ago', hAgo: ' h ago', dateLocale: 'en-US',
     ovHint: 'ReadMes on the current page are refreshed every time you open this tab. Other pages show their last known state.',
@@ -520,8 +524,9 @@ const STRINGS = {
     removeTitle: 'Bu künye kaldırılsın mı?', removeText: 'Canvas’taki kart ve kayıtlı künye verisi silinecek. Figma’da ⌘Z / Ctrl+Z ile geri alabilirsin.',
     cancel: 'Vazgeç',
     lastUpdated: 'Son güncelleme: ', notSaved: 'Henüz kaydedilmedi', unsaved: 'Kaydedilmemiş değişiklikler',
-    staleTitle: 'Seçim değişti',
-    staleText: (n) => '“' + n + '” için kaydedilmemiş değişikliklerin var. Kaydedersen oraya yazılır.',
+    staleTitle: 'Kaydedilmemiş değişiklikler',
+    staleText: (n) => '“' + n + '” section’ından kaydetmeden çıktın. Geri dönebilir ya da değişiklikleri atabilirsin. Buradan kaydedersen yine “' + n + '” için kaydedilir.',
+    goBack: (n) => '“' + n + '” section’ına dön',
     discard: 'Değişiklikleri at',
     justNow: 'az önce', minAgo: ' dk önce', hAgo: ' sa önce', dateLocale: 'tr-TR',
     ovHint: 'Bulunduğun sayfadaki künyeler bu sekmeyi her açtığında yenilenir. Diğer sayfalar bilinen son durumu gösterir.',
@@ -791,6 +796,7 @@ function render(m) {
     // Selection moved away while editing: keep the form bound to the original target.
     $('staleBanner').classList.add('show');
     $('staleText').textContent = t().staleText(editing.name);
+    $('goBack').textContent = t().goBack(editing.name);
     return;
   }
   $('staleBanner').classList.remove('show');
@@ -982,6 +988,7 @@ document.querySelectorAll('[data-add]').forEach((b) => {
 document.querySelector('main').addEventListener('scroll', () => { if (suggest.input) suggest.input.blur(); });
 $('notes').oninput = () => { form.notes = $('notes').value; markDirty(); };
 $('save').onclick = save;
+$('goBack').onclick = () => { if (editing) send({ type: 'goto', id: editing.id }); };
 $('discard').onclick = () => { dirty = false; editing = null; render(lastState); send({ type: 'refresh' }); };
 $('remove').onclick = () => $('confirm').classList.add('show');
 $('cancelRemove').onclick = () => $('confirm').classList.remove('show');
