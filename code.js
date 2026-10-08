@@ -14,12 +14,12 @@ const IDX_PREFIX = 'idx:'; // per-target index entries on the document root, use
 figma.skipInvisibleInstanceChildren = true; // keeps change detection fast in big files
 figma.showUI(__html__, { width: 360, height: 640, themeColors: true });
 
-// `color` is the status pill, `sticky` the note's paper color (FigJam-like sticky tones).
+// `color` is the status pill on the card.
 // `emoji` goes into the target's layer name (see syncName).
 const STATUSES = {
-  wip: { label: 'Work in progress', emoji: '🚧', color: '#D97706', sticky: '#FFEFA6' },
-  review: { label: 'In review', emoji: '👀', color: '#7C5CFF', sticky: '#E6DDFF' },
-  ready: { label: 'Ready for development', emoji: '✅', color: '#14A367', sticky: '#C9F2DA' }
+  wip: { label: 'Work in progress', emoji: '🚧', color: '#D97706' },
+  review: { label: 'In review', emoji: '👀', color: '#7C5CFF' },
+  ready: { label: 'Ready for development', emoji: '✅', color: '#14A367' }
 };
 
 // ---------- Helpers ----------
@@ -207,7 +207,8 @@ async function hashTarget(target, token) {
 
 // ---------- Card rendering ----------
 
-// Ink colors are translucent black so they read well on every sticky color.
+// Ink colors are translucent black over the sticky note's paper color.
+const STICKY = '#FFEFA6';
 const C = { link: '#2B49D6', warn: '#9A3412', warnBg: '#FFFFFF' };
 const INK = { text: 1, secondary: 0.62, tertiary: 0.4 };
 const FONTS = {
@@ -297,7 +298,7 @@ function renderCard(card, target, data) {
   card.paddingTop = card.paddingBottom = card.paddingLeft = card.paddingRight = 28;
   // Sticky note look: flat paper color, nearly square corners, soft lifted shadow.
   card.cornerRadius = 4;
-  card.fills = [solid(st.sticky)];
+  card.fills = [solid(STICKY)];
   card.strokes = [];
   card.effects = [
     { type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.1 }, offset: { x: 0, y: 1 },

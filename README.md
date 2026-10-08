@@ -8,7 +8,7 @@ A Figma plugin that attaches a **design spec card** to a section (or a root fram
 - Free-text notes
 - Last updated by / when (automatic)
 
-The card looks like a sticky note whose color follows the status (yellow = in progress, purple = in review, green = ready). It is a normal Figma frame made of plain text layers, so Figma MCP and Dev Mode read it like any other part of the design. The same data is also stored as JSON on the section (shared plugin data, including the section's id), which is what the plugin reads and edits.
+The card looks like a yellow sticky note; the status shows as a colored label on it. It is a normal Figma frame made of plain text layers, so Figma MCP and Dev Mode read it like any other part of the design. The same data is also stored as JSON on the section (shared plugin data, including the section's id), which is what the plugin reads and edits.
 
 ## Install
 
