@@ -14,7 +14,7 @@ const CARD_KEY = 'card';
 const IDX_PREFIX = 'idx:'; // per-section index entries on the document root, used by the overview
 const CARD_NAME = '📋 Design ReadMe';
 
-figma.showUI(__html__, { width: 360, height: 640, themeColors: true });
+figma.showUI(__html__, { width: 400, height: 660, themeColors: true });
 
 // `color` is the status pill on the card.
 // `emoji` goes into the section's layer name (see syncName).

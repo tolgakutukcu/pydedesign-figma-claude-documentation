@@ -102,9 +102,7 @@
   .seg button[data-status="review"].on { background: var(--review); }
   .seg button[data-status="ready"].on { background: var(--ready); }
   .seg button[data-lang].on { background: var(--accent); }
-  .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
-  .dot.wip { background: var(--wip); } .dot.review { background: var(--review); } .dot.ready { background: var(--ready); }
-  .seg button.on .dot { background: #fff; }
+  .emoji { flex: none; font-size: 12px; line-height: 1; }
 
   /* Inputs */
   .input, textarea, .chips {
@@ -342,9 +340,9 @@
         <div class="field">
           <div class="lbl" data-i18n="status"></div>
           <div class="seg" id="statusSeg">
-            <button data-status="wip"><i class="dot wip"></i><span data-i18n="wip"></span></button>
-            <button data-status="review"><i class="dot review"></i><span data-i18n="review"></span></button>
-            <button data-status="ready"><i class="dot ready"></i><span data-i18n="ready"></span></button>
+            <button data-status="wip"><span class="emoji">🚧</span><span data-i18n="wip"></span></button>
+            <button data-status="review"><span class="emoji">👀</span><span data-i18n="review"></span></button>
+            <button data-status="ready"><span class="emoji">✅</span><span data-i18n="ready"></span></button>
           </div>
         </div>
 
@@ -353,7 +351,6 @@
           <div class="owner"><span data-i18n="design"></span><div class="chips" data-role="design"></div></div>
           <div class="owner"><span data-i18n="dev"></span><div class="chips" data-role="dev"></div></div>
           <div class="owner"><span data-i18n="product"></span><div class="chips" data-role="product"></div></div>
-          <div class="hint" data-i18n="ownersHint"></div>
         </div>
 
         <div class="field">
@@ -458,7 +455,7 @@
   </div>
 
 <script>
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 const VERSION_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/version.json';
 
 const STRINGS = {
@@ -477,7 +474,6 @@ const STRINGS = {
     noSpec: 'No ReadMe yet', status: 'Status', wip: 'In progress', review: 'In review', ready: 'Ready for dev',
     statusLong: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
     owners: 'Owners', design: 'Design', dev: 'Development', product: 'Product',
-    ownersHint: 'Type any name and press Enter, or pick one from the suggestions (team list, owners used in this file, names you used before). Use × in the list to remove a wrong name.',
     forget: 'Remove from suggestions',
     jira: 'Jira links', slack: 'Slack threads', addJira: '+ Add Jira link', addSlack: '+ Add Slack thread',
     notes: 'Notes', notesPh: 'Anything developers (and Claude) should know: behaviour, interactions, rules, edge cases, decisions…',
@@ -517,7 +513,6 @@ const STRINGS = {
     noSpec: 'Henüz künye yok', status: 'Durum', wip: 'Devam ediyor', review: 'İncelemede', ready: 'Dev’e hazır',
     statusLong: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
     owners: 'Sorumlular', design: 'Design', dev: 'Development', product: 'Product',
-    ownersHint: 'İstediğin ismi yazıp Enter’a bas ya da önerilerden seç (ekip listesi, bu dosyada kullanılan sorumlular, daha önce yazdığın isimler). Yanlış bir ismi listedeki × ile kaldırabilirsin.',
     forget: 'Önerilerden kaldır',
     jira: 'Jira linkleri', slack: 'Slack thread’leri', addJira: '+ Jira linki ekle', addSlack: '+ Slack thread’i ekle',
     notes: 'Notlar', notesPh: 'Developer’ların (ve Claude’un) bilmesi gerekenler: davranış, etkileşimler, kurallar, edge case’ler, kararlar…',
@@ -550,6 +545,7 @@ const ICONS = {
 const X = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg>';
 
 const $ = (id) => document.getElementById(id);
+const EMOJI = { wip: '🚧', review: '👀', ready: '✅' }; // same as the section name suffix
 const t = () => STRINGS[lang];
 let lang = 'en';
 let view = 'spec';
@@ -852,7 +848,7 @@ function renderOverview() {
   ['all', 'wip', 'review', 'ready'].forEach((s) => {
     const b = document.createElement('button');
     b.className = filter === s ? 'on' : '';
-    b.innerHTML = (s === 'all' ? '' : '<i class="dot ' + s + '"></i>') + '<span></span><b></b>';
+    b.innerHTML = (s === 'all' ? '' : '<span class="emoji">' + EMOJI[s] + '</span>') + '<span></span><b></b>';
     b.querySelector('span').textContent = s === 'all' ? t().all : t()[s];
     b.querySelector('b').textContent = count(s);
     b.onclick = () => { filter = s; renderOverview(); };
@@ -887,7 +883,7 @@ function renderOverview() {
     shown.filter((e) => e.pageId === pid).forEach((e) => {
       const b = document.createElement('button');
       b.className = 'entry';
-      b.innerHTML = '<i class="dot ' + e.status + '"></i><div class="meta"><div class="name"></div><div class="sub"></div></div>';
+      b.innerHTML = '<span class="emoji">' + (EMOJI[e.status] || '') + '</span><div class="meta"><div class="name"></div><div class="sub"></div></div>';
       b.querySelector('.name').textContent = e.name;
       b.querySelector('.sub').textContent = t().statusLong[e.status] + (e.at ? ' · ' + (e.by ? e.by + ' · ' : '') + ago(e.at) : '');
       b.onclick = () => { send({ type: 'goto', id: e.id }); setView('spec'); };
