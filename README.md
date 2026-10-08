@@ -53,7 +53,7 @@ Any name can be typed into any owner field. Figma only lets plugins see the peop
 ["Name Surname", "Name Surname"]
 ```
 
-The repo is public, so `team.json` should only contain names.
+The repo is public, so `team.json` should only contain names. To refresh it, use **Copy member names** in the #general channel's member list in Slack (no admin rights needed) and turn the comma-separated names into the list above.
 
 ## For developers using Claude Code + Figma MCP
 
