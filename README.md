@@ -35,11 +35,6 @@ The section/frame name shows its status after an em dash, updated on every save:
 
 Removing the spec removes the suffix. Labels and emojis are in `STATUSES` in `code.js`.
 
-### Ready for development
-
-- At that moment the plugin stores a fingerprint of the design. When someone later opens the plugin on that section and the design has changed, the plugin and the card show a warning: *"The design changed after it was marked Ready for development"*. From the warning you can **accept the changes** (keep Ready, new baseline) or **move it to In review**.
-- Detection runs only when the plugin is open and the section is selected. It runs in small chunks in the background (the plugin shows "Checking for design changes…"), so Figma stays responsive on large sections, and it stops if you select something else.
-
 ### Overview
 
 The **Overview** tab lists every spec in the file with its status. The current page is rescanned each time you open the tab, using Figma's indexed search, so it is fast even in big files. Other pages show their last known state. **Scan all pages** loads every page and refreshes everything; it can take a while in large files.
@@ -73,8 +68,6 @@ Before implementing a Figma section or screen, look for a layer named "📋 Desi
 inside the section (or next to the frame). It contains the status, owners, Jira / Slack links
 and the designer's notes. Treat the notes as requirements.
 - If the status is not "Ready for development", say so before implementing.
-- If the card shows "The design changed after it was marked Ready for development",
-  confirm the details with the design owner before implementing.
 ```
 
 ## Releasing a new version

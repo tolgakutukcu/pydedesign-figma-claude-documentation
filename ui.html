@@ -82,12 +82,6 @@
   .banner .actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   .banner.info { background: var(--accent-soft); color: var(--figma-color-text); }
 
-  .checking { display: none; align-items: center; gap: 8px; margin-top: 8px; font-size: 11px; color: var(--figma-color-text-secondary); }
-  .checking.show { display: flex; }
-  .checking i {
-    width: 10px; height: 10px; border-radius: 50%; flex: none;
-    border: 2px solid var(--figma-color-bg-secondary); border-top-color: var(--accent); animation: spin .8s linear infinite;
-  }
   .field { margin-top: 16px; }
   .lbl { font-size: 11px; font-weight: 600; color: var(--figma-color-text-secondary); margin-bottom: 6px; }
   .hint { font-size: 11px; color: var(--figma-color-text-tertiary); margin-top: 4px; }
@@ -219,7 +213,6 @@
   .entry .meta { flex: 1; min-width: 0; }
   .entry .name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .entry .sub { font-size: 11px; color: var(--figma-color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .entry .warn { flex: none; color: var(--warn); font-size: 11px; font-weight: 600; }
   .ov-empty { padding: 40px 12px; text-align: center; color: var(--figma-color-text-secondary); }
   .ov-foot { margin-top: 18px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 
@@ -340,21 +333,10 @@
           <span class="badge" id="badge"></span>
         </div>
 
-        <div class="checking" id="checking"><i></i><span data-i18n="checking"></span></div>
-
         <div class="banner info" id="staleBanner">
           <b data-i18n="staleTitle"></b>
           <span id="staleText"></span>
           <div class="actions"><button class="btn small" id="discard" data-i18n="discard"></button></div>
-        </div>
-
-        <div class="banner" id="changedBanner">
-          <b data-i18n="changedTitle"></b>
-          <span id="changedText"></span>
-          <div class="actions">
-            <button class="btn small" id="accept" data-i18n="accept"></button>
-            <button class="btn small" id="toReview" data-i18n="toReview"></button>
-          </div>
         </div>
 
         <div class="field">
@@ -475,7 +457,7 @@
   </div>
 
 <script>
-const VERSION = '1.4.1';
+const VERSION = '1.5.0';
 const VERSION_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/version.json';
 
 const STRINGS = {
@@ -502,15 +484,10 @@ const STRINGS = {
     staleTitle: 'Selection changed',
     staleText: (n) => 'You have unsaved changes for “' + n + '”. Saving writes to that one.',
     discard: 'Discard changes',
-    checking: 'Checking for design changes since Ready…',
-    changedTitle: 'Design changed after Ready',
-    changedText: (d) => 'This design no longer matches the version marked Ready for development (detected ' + d + '). The card on the canvas shows a warning.',
-    accept: 'Accept changes, keep Ready', toReview: 'Move to In review',
     justNow: 'just now', minAgo: ' min ago', hAgo: ' h ago', dateLocale: 'en-US',
     ovHint: 'Specs on the current page are refreshed every time you open this tab. Other pages show their last known state.',
     scanAll: 'Scan all pages', scanning: 'Scanning…', all: 'All', current: 'current page',
     ovEmpty: 'No specs in this file yet.', ovEmptyFilter: 'No specs with this status.',
-    changed: 'Changed',
     updTitle: 'Update required',
     updText: 'A newer version of this plugin is available. Please download it to keep using it.',
     updDownload: 'Download from GitHub',
@@ -544,15 +521,10 @@ const STRINGS = {
     staleTitle: 'Seçim değişti',
     staleText: (n) => '“' + n + '” için kaydedilmemiş değişikliklerin var. Kaydedersen oraya yazılır.',
     discard: 'Değişiklikleri at',
-    checking: 'Ready’den sonraki tasarım değişiklikleri kontrol ediliyor…',
-    changedTitle: 'Ready’den sonra tasarım değişti',
-    changedText: (d) => 'Bu tasarım, Ready for development olarak işaretlenen hâlinden farklı (' + d + ' tespit edildi). Canvas’taki kartta uyarı gösteriliyor.',
-    accept: 'Değişiklikleri onayla, Ready kalsın', toReview: 'In review’a al',
     justNow: 'az önce', minAgo: ' dk önce', hAgo: ' sa önce', dateLocale: 'tr-TR',
     ovHint: 'Bulunduğun sayfadaki spec’ler bu sekmeyi her açtığında yenilenir. Diğer sayfalar bilinen son durumu gösterir.',
     scanAll: 'Tüm sayfaları tara', scanning: 'Taranıyor…', all: 'Tümü', current: 'bu sayfa',
     ovEmpty: 'Bu dosyada henüz spec yok.', ovEmptyFilter: 'Bu durumda spec yok.',
-    changed: 'Değişti',
     updTitle: 'Güncelleme gerekli',
     updText: 'Bu plugin’in daha yeni bir sürümü var. Kullanmaya devam etmek için lütfen indir.',
     updDownload: 'GitHub’dan indir',
@@ -587,7 +559,6 @@ let form = null;
 let editing = null; // { id, name, hasSpec, spec }
 let dirty = false;
 let saving = false;
-let checking = null; // { id, token } while code.js compares a Ready design with its snapshot
 
 function send(m) { parent.postMessage({ pluginMessage: m }, '*'); }
 
@@ -847,15 +818,7 @@ function render(m) {
     renderForm();
   }
 
-  const changed = m.spec && m.spec.status === 'ready' && m.spec.changed;
-  $('changedBanner').classList.toggle('show', !!changed);
-  if (changed) $('changedText').textContent = t().changedText(new Date(m.spec.changed.at).toLocaleString(t().dateLocale));
   renderFooter();
-  renderChecking();
-}
-
-function renderChecking() {
-  $('checking').classList.toggle('show', !!(checking && editing && checking.id === editing.id));
 }
 
 function collect() {
@@ -923,12 +886,6 @@ function renderOverview() {
       b.innerHTML = '<i class="dot ' + e.status + '"></i><div class="meta"><div class="name"></div><div class="sub"></div></div>';
       b.querySelector('.name').textContent = e.name;
       b.querySelector('.sub').textContent = t().statusLong[e.status] + (e.at ? ' · ' + (e.by ? e.by + ' · ' : '') + ago(e.at) : '');
-      if (e.changed) {
-        const w = document.createElement('span');
-        w.className = 'warn';
-        w.textContent = '⚠ ' + t().changed;
-        b.append(w);
-      }
       b.onclick = () => { send({ type: 'goto', id: e.id }); setView('spec'); };
       list.append(b);
     });
@@ -1026,8 +983,6 @@ document.querySelector('main').addEventListener('scroll', () => { if (suggest.in
 $('notes').oninput = () => { form.notes = $('notes').value; markDirty(); };
 $('save').onclick = save;
 $('discard').onclick = () => { dirty = false; editing = null; render(lastState); send({ type: 'refresh' }); };
-$('accept').onclick = () => { if (editing) send({ type: 'resnapshot', id: editing.id }); };
-$('toReview').onclick = () => { form.status = 'review'; renderStatus(); save(); };
 $('remove').onclick = () => $('confirm').classList.add('show');
 $('cancelRemove').onclick = () => $('confirm').classList.remove('show');
 $('confirmRemove').onclick = () => {
@@ -1062,10 +1017,6 @@ onmessage = (e) => {
   } else if (m.type === 'saved') {
     saving = false;
     dirty = false;
-  } else if (m.type === 'checking') {
-    if (m.on) checking = { id: m.id, token: m.token };
-    else if (checking && checking.token === m.token) checking = null;
-    renderChecking();
   } else if (m.type === 'people') {
     filePeople = m.people || [];
     renderPeople();

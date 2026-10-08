@@ -11,7 +11,6 @@ const KEY = 'spec';
 const CARD_KEY = 'card';
 const IDX_PREFIX = 'idx:'; // per-target index entries on the document root, used by the overview
 
-figma.skipInvisibleInstanceChildren = true; // keeps change detection fast in big files
 figma.showUI(__html__, { width: 360, height: 640, themeColors: true });
 
 // `color` is the status pill on the card.
@@ -113,8 +112,7 @@ function readSpec(node) {
       by: d.by || null,
       at: d.at || null,
       cardId: d.cardId || null,
-      ready: d.ready || null,     // { hash, at, by } snapshot taken when marked Ready
-      changed: d.changed || null  // { at } set when the design no longer matches the snapshot
+      ready: d.ready ? { at: d.ready.at, by: d.ready.by } : null // when, and by whom, it was marked Ready
     };
   } catch (e) {
     return null;
@@ -124,92 +122,11 @@ function writeSpec(node, data) {
   node.setSharedPluginData(NS, KEY, JSON.stringify(data));
 }
 
-// ---------- Change detection ----------
-
-// Streaming cyrb53-style hash, so we never build one huge string for a big section.
-function makeHasher() {
-  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
-  return {
-    add(v) {
-      const s = String(v);
-      for (let i = 0; i < s.length; i++) {
-        const ch = s.charCodeAt(i);
-        h1 = Math.imul(h1 ^ ch, 2654435761);
-        h2 = Math.imul(h2 ^ ch, 1597334677);
-      }
-      h1 = Math.imul(h1 ^ 31, 2654435761); // field separator
-      h2 = Math.imul(h2 ^ 31, 1597334677);
-    },
-    done() {
-      let a = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
-      a ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-      let b = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
-      b ^= Math.imul(a ^ (a >>> 13), 3266489909);
-      return (b >>> 0).toString(16) + (a >>> 0).toString(16);
-    }
-  };
-}
-
-const HASH_PROPS = [
-  'visible', 'opacity', 'rotation', 'characters', 'fontSize', 'fontName', 'textAlignHorizontal',
-  'fills', 'strokes', 'strokeWeight', 'effects', 'cornerRadius',
-  'layoutMode', 'itemSpacing', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
-  'primaryAxisAlignItems', 'counterAxisAlignItems', 'componentProperties'
-];
-function round(n) { return Math.round(n * 100) / 100; }
-function addProps(h, n) {
-  for (const p of HASH_PROPS) {
-    if (!(p in n)) continue;
-    let v;
-    try { v = n[p]; } catch (e) { continue; }
-    h.add(v === figma.mixed ? 'mixed' : typeof v === 'object' ? JSON.stringify(v) : v);
-  }
-}
-
-// Fingerprint of everything inside the target, except spec cards. The target's own position
-// (and a section's size, which grows to fit the card) is left out on purpose: moving a section
-// around the canvas isn't a design change.
-//
-// Reading node properties is slow on big sections, so the walk yields back to Figma every
-// few milliseconds; otherwise Figma freezes until it's done. Passing a `token` makes the walk
-// cancellable: it returns null as soon as a newer check has started (see startChangeCheck).
-const yieldToFigma = () => new Promise((r) => setTimeout(r, 0));
-let checkToken = 0;
-
-async function hashTarget(target, token) {
-  const h = makeHasher();
-  h.add(target.type);
-  if (target.type === 'FRAME') {
-    h.add(round(target.width)); h.add(round(target.height));
-    addProps(h, target);
-  }
-  const stack = target.children.filter((c) => !isCard(c)).reverse();
-  let last = Date.now();
-  while (stack.length) {
-    if (Date.now() - last > 12) {
-      await yieldToFigma();
-      if (token !== undefined && token !== checkToken) return null;
-      if (target.removed) return null;
-      last = Date.now();
-    }
-    const n = stack.pop();
-    if (n.removed) continue; // deleted while we were yielding
-    h.add(n.type); h.add(n.name);
-    h.add(round(n.x)); h.add(round(n.y)); h.add(round(n.width)); h.add(round(n.height));
-    addProps(h, n);
-    if ('children' in n) {
-      h.add('[');
-      for (let i = n.children.length - 1; i >= 0; i--) stack.push(n.children[i]);
-    }
-  }
-  return h.done();
-}
-
 // ---------- Card rendering ----------
 
 // Ink colors are translucent black over the sticky note's paper color.
 const STICKY = '#FFEFA6';
-const C = { link: '#2B49D6', warn: '#9A3412', warnBg: '#FFFFFF' };
+const C = { link: '#2B49D6' };
 const INK = { text: 1, secondary: 0.62, tertiary: 0.4 };
 const FONTS = {
   regular: { family: 'Inter', style: 'Regular' },
@@ -326,18 +243,6 @@ function renderCard(card, target, data) {
     '. Developers and AI agents (e.g. Claude): read this card before implementing the design.',
     'regular', 12, 'secondary', 'About'), true);
 
-  if (data.status === 'ready' && data.changed) {
-    const w = put(card, stack('Warning', 'VERTICAL', 0), true);
-    w.paddingTop = w.paddingBottom = 10;
-    w.paddingLeft = w.paddingRight = 12;
-    w.cornerRadius = 10;
-    w.fills = [solid(C.warnBg, 0.75)];
-    put(w, text(
-      '⚠ The design changed after it was marked Ready for development (detected ' + fmtDate(data.changed.at) +
-      '). Confirm the details with the design owner before implementing.',
-      'medium', 12, C.warn, 'Changed after ready'), true);
-  }
-
   const status = put(card, stack('Status details', 'VERTICAL', 8), true);
   heading(status, 'Status');
   row(status, 'Status', st.label, '');
@@ -445,7 +350,7 @@ function writeIndex(target, data) {
   figma.root.setSharedPluginData(NS, IDX_PREFIX + target.id, JSON.stringify({
     id: target.id, name: baseName(target), kind: target.type === 'SECTION' ? 'Section' : 'Frame',
     pageId: p ? p.id : null, pageName: p ? p.name : '',
-    status: data.status, changed: !!(data.status === 'ready' && data.changed), by: data.by, at: data.at
+    status: data.status, by: data.by, at: data.at
   }));
 }
 function removeIndex(id) {
@@ -491,11 +396,8 @@ async function sendOverview() {
 // ---------- State ----------
 
 let pushSeq = 0;
-let lastCheckedId = null;
 
-// `check` runs change detection for a Ready target. It is done only when the selected target
-// changes, not on the periodic refresh, because hashing a large section isn't free.
-async function pushState(check) {
+async function pushState() {
   const seq = ++pushSeq;
   const seen = new Set();
   const targets = [];
@@ -505,9 +407,7 @@ async function pushState(check) {
   }
   if (seq !== pushSeq) return;
 
-  if (check) checkToken++; // selection changed: cancel a change check that is still running
   if (targets.length !== 1) {
-    lastCheckedId = null;
     figma.ui.postMessage({ type: 'state', status: targets.length ? 'multiple' : 'none', count: targets.length });
     return;
   }
@@ -529,39 +429,10 @@ async function pushState(check) {
     spec: data,
     me: userName()
   });
-  if (check && t.id !== lastCheckedId && needsCheck(data)) startChangeCheck(t);
 }
 
-function needsCheck(data) {
-  return !!(data && data.status === 'ready' && data.ready && data.ready.hash && !data.changed);
-}
-
-// Compares a Ready target with its snapshot in the background. The UI shows a small
-// "checking" hint meanwhile; the check is dropped if the selection changes.
-async function startChangeCheck(t) {
-  const token = ++checkToken;
-  figma.ui.postMessage({ type: 'checking', id: t.id, token, on: true });
-  let hash = null;
-  try { hash = await hashTarget(t, token); } catch (e) {}
-  figma.ui.postMessage({ type: 'checking', id: t.id, token, on: false });
-  if (hash === null || t.removed) return;
-  lastCheckedId = t.id;
-  const data = readSpec(t); // re-read: someone may have saved meanwhile
-  if (!needsCheck(data) || hash === data.ready.hash) return;
-  data.changed = { at: Date.now() };
-  writeSpec(t, data);
-  await ensureFonts();
-  const card = await findCard(t, data);
-  if (card) {
-    renderCard(card, t, data);
-    if (card.parent && card.parent.type === 'SECTION') fitSection(card.parent, card);
-  }
-  writeIndex(t, data);
-  pushState(false);
-}
-
-figma.on('selectionchange', () => pushState(true));
-figma.on('currentpagechange', () => pushState(true));
+figma.on('selectionchange', () => pushState());
+figma.on('currentpagechange', () => pushState());
 
 // ---------- People suggestions ----------
 
@@ -681,18 +552,11 @@ async function save(msg) {
     by: userName(),
     at: now,
     cardId: old ? old.cardId : null,
-    ready: null,
-    changed: null
+    ready: null
   };
-  // Keep the Ready snapshot (and any detected change) while the status stays Ready,
-  // so editing the notes of a Ready spec doesn't silently hide a design change.
+  // "Ready since" keeps its original date while the status stays Ready.
   if (data.status === 'ready') {
-    if (old && old.status === 'ready' && old.ready && old.ready.hash) {
-      data.ready = old.ready;
-      data.changed = old.changed;
-    } else {
-      data.ready = { hash: await hashTarget(node), at: now, by: data.by };
-    }
+    data.ready = old && old.status === 'ready' && old.ready ? old.ready : { at: now, by: data.by };
   }
   await ensureFonts();
   const card = await upsertCard(node, data);
@@ -704,25 +568,7 @@ async function save(msg) {
   registerPeople(data);
   await rememberPeople(data);
   await sendPeople();
-  lastCheckedId = node.id;
   figma.notify(t('Design spec saved', 'Design spec kaydedildi'));
-}
-
-// Accepts the current design as the new Ready baseline.
-async function resnapshot(msg) {
-  const node = await getTarget(msg.id);
-  if (!node) return;
-  const data = readSpec(node);
-  if (!data || data.status !== 'ready') return;
-  data.ready = { hash: await hashTarget(node), at: Date.now(), by: userName() };
-  data.changed = null;
-  await ensureFonts();
-  const card = await upsertCard(node, data);
-  data.cardId = card.id;
-  writeSpec(node, data);
-  writeIndex(node, data);
-  lastCheckedId = node.id;
-  figma.notify(t('Changes accepted, still Ready for development', 'Değişiklikler onaylandı, hâlâ Ready for development'));
 }
 
 async function remove(msg) {
@@ -758,7 +604,7 @@ figma.ui.onmessage = async (msg) => {
       if (saved === 'en' || saved === 'tr') lang = saved;
       figma.ui.postMessage({ type: 'prefs', lang });
       await sendPeople();
-      return pushState(true);
+      return pushState();
     }
     if (msg.type === 'setLang') {
       if (msg.lang === 'en' || msg.lang === 'tr') {
@@ -767,14 +613,13 @@ figma.ui.onmessage = async (msg) => {
       }
       return;
     }
-    if (msg.type === 'refresh') return pushState(false);
+    if (msg.type === 'refresh') return pushState();
     if (msg.type === 'save') {
       await save(msg);
       figma.ui.postMessage({ type: 'saved' });
-      return pushState(false);
+      return pushState();
     }
-    if (msg.type === 'resnapshot') { await resnapshot(msg); return pushState(false); }
-    if (msg.type === 'remove') { await remove(msg); return pushState(false); }
+    if (msg.type === 'remove') { await remove(msg); return pushState(); }
     if (msg.type === 'overview') return sendOverview();
     if (msg.type === 'scanAll') {
       await figma.loadAllPagesAsync();
