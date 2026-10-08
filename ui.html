@@ -130,7 +130,7 @@
   .chips input { flex: 1; min-width: 80px; height: 22px; border: 0; outline: none; background: none; padding: 0 4px; }
 
   .suggest {
-    position: fixed; z-index: 4; display: none; max-height: 220px; overflow-y: auto; padding: 4px;
+    position: fixed; z-index: 4; display: none; max-height: 240px; overflow-y: auto; padding: 4px;
     border-radius: 9px; border: 1px solid var(--figma-color-border); background: var(--figma-color-bg);
     box-shadow: 0 6px 24px rgba(0, 0, 0, .14);
   }
@@ -458,7 +458,7 @@
   </div>
 
 <script>
-const VERSION = '2.0.4';
+const VERSION = '2.0.5';
 const VERSION_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/version.json';
 
 const STRINGS = {
@@ -617,10 +617,10 @@ function showSuggest(input, role, box, commit) {
   const q = input.value.trim().toLocaleLowerCase('tr');
   suggest.items = suggestions()
     .filter((p) => form.owners[role].indexOf(p.name) === -1)
-    .filter((p) => !q || p.name.toLocaleLowerCase('tr').indexOf(q) !== -1)
-    .slice(0, 8);
+    .filter((p) => !q || p.name.toLocaleLowerCase('tr').indexOf(q) !== -1);
   if (suggest.active >= suggest.items.length) suggest.active = suggest.items.length - 1;
   const el = $('suggest');
+  const scroll = el.classList.contains('show') ? el.scrollTop : 0; // keep the position when re-rendering
   el.innerHTML = '';
   if (!suggest.items.length) return el.classList.remove('show');
   suggest.items.forEach((p, i) => {
@@ -650,9 +650,16 @@ function showSuggest(input, role, box, commit) {
   el.style.left = r.left + 'px';
   el.style.width = r.width + 'px';
   el.classList.add('show');
-  // Open upwards when there isn't enough room below.
-  const below = window.innerHeight - r.bottom - 8;
-  el.style.top = (below < el.offsetHeight && r.top > el.offsetHeight ? r.top - el.offsetHeight - 4 : r.bottom + 4) + 'px';
+  // The list scrolls; it opens on whichever side of the field has more room.
+  el.style.maxHeight = '';
+  const below = window.innerHeight - r.bottom - 12;
+  const above = r.top - 12;
+  const up = el.scrollHeight > below && above > below;
+  el.style.maxHeight = Math.min(240, up ? above : below) + 'px';
+  el.style.top = (up ? r.top - el.offsetHeight - 4 : r.bottom + 4) + 'px';
+  el.scrollTop = scroll;
+  const active = el.querySelector('.sg-item.on');
+  if (active) active.scrollIntoView({ block: 'nearest' });
 }
 
 function emptyForm(me) {
