@@ -101,7 +101,7 @@
   .seg button[data-status="wip"].on { background: var(--wip); }
   .seg button[data-status="review"].on { background: var(--review); }
   .seg button[data-status="ready"].on { background: var(--ready); }
-  .seg button[data-lang].on, .seg button[data-card-lang].on { background: var(--accent); }
+  .seg button[data-lang].on { background: var(--accent); }
   .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
   .dot.wip { background: var(--wip); } .dot.review { background: var(--review); } .dot.ready { background: var(--ready); }
   .seg button.on .dot { background: #fff; }
@@ -302,7 +302,7 @@
         <img class="logo" alt="">
         <div>
           <div class="eyebrow">Pyde Design <small id="ver"></small></div>
-          <h1>Design Spec</h1>
+          <h1 data-i18n="appTitle"></h1>
         </div>
       </div>
       <button class="icon-btn" id="openSettings" data-i18n-title="settings">
@@ -345,14 +345,6 @@
             <button data-status="wip"><i class="dot wip"></i><span data-i18n="wip"></span></button>
             <button data-status="review"><i class="dot review"></i><span data-i18n="review"></span></button>
             <button data-status="ready"><i class="dot ready"></i><span data-i18n="ready"></span></button>
-          </div>
-        </div>
-
-        <div class="field">
-          <div class="lbl" data-i18n="cardLanguage"></div>
-          <div class="seg">
-            <button data-card-lang="en">English</button>
-            <button data-card-lang="tr">Türkçe</button>
           </div>
         </div>
 
@@ -466,38 +458,40 @@
   </div>
 
 <script>
-const VERSION = '1.8.0';
+const VERSION = '2.0.0';
 const VERSION_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/version.json';
 
 const STRINGS = {
   en: {
     settings: 'Settings', back: 'Back', language: 'Language', version: 'Version',
     langHint: 'Only changes the plugin interface, just for you.',
-    cardLanguage: 'Card language',
-    tabSpec: 'Spec', tabOverview: 'Overview',
-    emptyTitle: 'Select a section or frame',
-    emptyText: 'A spec attaches to a section, or to a frame placed directly on the page or directly inside a section. You can also select an existing spec card.',
-    multiTitle: 'Select a single section or frame',
-    multiText: (n) => n + ' different sections / frames are selected. A spec belongs to one at a time.',
+    appTitle: 'Design ReadMe',
+    tabSpec: 'ReadMe', tabOverview: 'Overview',
+    emptyTitle: 'Select a section',
+    emptyText: 'A Design ReadMe attaches to a section. You can also select an existing ReadMe card.',
+    frameTitle: 'Select the section',
+    frameText: 'A Design ReadMe can only be added to a section, not to a frame. Select the section the frame is in.',
+    multiTitle: 'Select a single section',
+    multiText: (n) => n + ' different sections are selected. A ReadMe belongs to one section at a time.',
     inSection: (s) => 'in section “' + s + '”',
-    noSpec: 'No spec yet', status: 'Status', wip: 'In progress', review: 'In review', ready: 'Ready for dev',
+    noSpec: 'No ReadMe yet', status: 'Status', wip: 'In progress', review: 'In review', ready: 'Ready for dev',
     statusLong: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
     owners: 'Owners', design: 'Design', dev: 'Development', product: 'Product',
-    ownersHint: 'Type a name and press Enter. Suggestions come from the team list, owners used in this file and names you used before. Use × in the list to remove a wrong name.',
+    ownersHint: 'Type any name and press Enter, or pick one from the suggestions (team list, owners used in this file, names you used before). Use × in the list to remove a wrong name.',
     forget: 'Remove from suggestions',
     jira: 'Jira links', slack: 'Slack threads', addJira: '+ Add Jira link', addSlack: '+ Add Slack thread',
     notes: 'Notes', notesPh: 'Anything developers (and Claude) should know: behaviour, interactions, rules, edge cases, decisions…',
-    create: 'Add spec card', save: 'Save changes', saved: 'Saved', remove: 'Remove',
-    removeTitle: 'Remove this spec?', removeText: 'The card on the canvas and the saved spec data will be deleted. You can undo with ⌘Z / Ctrl+Z in Figma.',
+    create: 'Add Design ReadMe', save: 'Save changes', saved: 'Saved', remove: 'Remove',
+    removeTitle: 'Remove this ReadMe?', removeText: 'The card on the canvas and the saved ReadMe data will be deleted. You can undo with ⌘Z / Ctrl+Z in Figma.',
     cancel: 'Cancel',
     lastUpdated: 'Last updated: ', notSaved: 'Not saved yet', unsaved: 'Unsaved changes',
     staleTitle: 'Selection changed',
     staleText: (n) => 'You have unsaved changes for “' + n + '”. Saving writes to that one.',
     discard: 'Discard changes',
     justNow: 'just now', minAgo: ' min ago', hAgo: ' h ago', dateLocale: 'en-US',
-    ovHint: 'Specs on the current page are refreshed every time you open this tab. Other pages show their last known state.',
+    ovHint: 'ReadMes on the current page are refreshed every time you open this tab. Other pages show their last known state.',
     scanAll: 'Scan all pages', scanning: 'Scanning…', all: 'All', current: 'current page',
-    ovEmpty: 'No specs in this file yet.', ovEmptyFilter: 'No specs with this status.',
+    ovEmpty: 'No ReadMes in this file yet.', ovEmptyFilter: 'No ReadMes with this status.',
     updTitle: 'Update required',
     updText: 'A newer version of this plugin is available. Please download it to keep using it.',
     updDownload: 'Download from GitHub',
@@ -511,31 +505,33 @@ const STRINGS = {
   tr: {
     settings: 'Ayarlar', back: 'Geri', language: 'Dil', version: 'Sürüm',
     langHint: 'Sadece senin için plugin arayüzünün dilini değiştirir.',
-    cardLanguage: 'Kart dili',
-    tabSpec: 'Spec', tabOverview: 'Genel bakış',
-    emptyTitle: 'Bir section veya frame seç',
-    emptyText: 'Spec; bir section’a ya da doğrudan sayfada veya doğrudan bir section içinde duran bir frame’e bağlanır. Mevcut bir spec kartını da seçebilirsin.',
-    multiTitle: 'Tek bir section veya frame seç',
-    multiText: (n) => n + ' farklı section / frame seçili. Bir spec aynı anda sadece birine ait olur.',
+    appTitle: 'Tasarım Künyesi',
+    tabSpec: 'Künye', tabOverview: 'Genel bakış',
+    emptyTitle: 'Bir section seç',
+    emptyText: 'Tasarım künyesi bir section’a eklenir. Mevcut bir künye kartını da seçebilirsin.',
+    frameTitle: 'Section’ı seç',
+    frameText: 'Tasarım künyesi frame’e değil, sadece section’a eklenebilir. Frame’in içinde bulunduğu section’ı seç.',
+    multiTitle: 'Tek bir section seç',
+    multiText: (n) => n + ' farklı section seçili. Bir künye aynı anda sadece bir section’a ait olur.',
     inSection: (s) => '“' + s + '” section’ında',
-    noSpec: 'Henüz spec yok', status: 'Durum', wip: 'Devam ediyor', review: 'İncelemede', ready: 'Dev’e hazır',
+    noSpec: 'Henüz künye yok', status: 'Durum', wip: 'Devam ediyor', review: 'İncelemede', ready: 'Dev’e hazır',
     statusLong: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
     owners: 'Sorumlular', design: 'Design', dev: 'Development', product: 'Product',
-    ownersHint: 'Bir isim yazıp Enter’a bas. Öneriler ekip listesinden, bu dosyada kullanılan sorumlulardan ve daha önce yazdığın isimlerden gelir. Yanlış bir ismi listedeki × ile kaldırabilirsin.',
+    ownersHint: 'İstediğin ismi yazıp Enter’a bas ya da önerilerden seç (ekip listesi, bu dosyada kullanılan sorumlular, daha önce yazdığın isimler). Yanlış bir ismi listedeki × ile kaldırabilirsin.',
     forget: 'Önerilerden kaldır',
     jira: 'Jira linkleri', slack: 'Slack thread’leri', addJira: '+ Jira linki ekle', addSlack: '+ Slack thread’i ekle',
     notes: 'Notlar', notesPh: 'Developer’ların (ve Claude’un) bilmesi gerekenler: davranış, etkileşimler, kurallar, edge case’ler, kararlar…',
-    create: 'Spec kartı ekle', save: 'Değişiklikleri kaydet', saved: 'Kaydedildi', remove: 'Kaldır',
-    removeTitle: 'Bu spec kaldırılsın mı?', removeText: 'Canvas’taki kart ve kayıtlı spec verisi silinecek. Figma’da ⌘Z / Ctrl+Z ile geri alabilirsin.',
+    create: 'Künye ekle', save: 'Değişiklikleri kaydet', saved: 'Kaydedildi', remove: 'Kaldır',
+    removeTitle: 'Bu künye kaldırılsın mı?', removeText: 'Canvas’taki kart ve kayıtlı künye verisi silinecek. Figma’da ⌘Z / Ctrl+Z ile geri alabilirsin.',
     cancel: 'Vazgeç',
     lastUpdated: 'Son güncelleme: ', notSaved: 'Henüz kaydedilmedi', unsaved: 'Kaydedilmemiş değişiklikler',
     staleTitle: 'Seçim değişti',
     staleText: (n) => '“' + n + '” için kaydedilmemiş değişikliklerin var. Kaydedersen oraya yazılır.',
     discard: 'Değişiklikleri at',
     justNow: 'az önce', minAgo: ' dk önce', hAgo: ' sa önce', dateLocale: 'tr-TR',
-    ovHint: 'Bulunduğun sayfadaki spec’ler bu sekmeyi her açtığında yenilenir. Diğer sayfalar bilinen son durumu gösterir.',
+    ovHint: 'Bulunduğun sayfadaki künyeler bu sekmeyi her açtığında yenilenir. Diğer sayfalar bilinen son durumu gösterir.',
     scanAll: 'Tüm sayfaları tara', scanning: 'Taranıyor…', all: 'Tümü', current: 'bu sayfa',
-    ovEmpty: 'Bu dosyada henüz spec yok.', ovEmptyFilter: 'Bu durumda spec yok.',
+    ovEmpty: 'Bu dosyada henüz künye yok.', ovEmptyFilter: 'Bu durumda künye yok.',
     updTitle: 'Güncelleme gerekli',
     updText: 'Bu plugin’in daha yeni bir sürümü var. Kullanmaya devam etmek için lütfen indir.',
     updDownload: 'GitHub’dan indir',
@@ -549,7 +545,6 @@ const STRINGS = {
 };
 
 const ICONS = {
-  Frame: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M5.5 2v12M10.5 2v12M2 5.5h12M2 10.5h12"/></svg>',
   Section: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M2 5.5V4a1 1 0 0 1 1-1h3.5a1 1 0 0 1 1 1v1.5M2 5.5h12V12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5.5z"/></svg>'
 };
 const X = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M2 2l6 6M8 2l-6 6"/></svg>';
@@ -570,7 +565,6 @@ let form = null;
 let editing = null; // { id, name, hasSpec, spec }
 let dirty = false;
 let saving = false;
-let defaultCardLang = 'en'; // language for new specs: the one this user picked last
 
 function send(m) { parent.postMessage({ pluginMessage: m }, '*'); }
 
@@ -578,35 +572,29 @@ function send(m) { parent.postMessage({ pluginMessage: m }, '*'); }
 // Figma only tells plugins who has the file open right now, so the team roster lives in
 // team.json in the GitHub repo. It is merged with the people the plugin finds in the file.
 const TEAM_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/team.json';
-let team = { design: [], dev: [], product: [] };
-let filePeople = []; // [{ name, roles }] from code.js
+let team = [];       // names from team.json
+let filePeople = []; // [{ name, removable }] from code.js
 
+// team.json is a plain list of names: ["Name Surname", …]. The older per-role object
+// ({ design: [], development: [], product: [] }) is still read, flattened.
 async function loadTeam() {
   try {
     const res = await fetch(TEAM_URL + '?t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) return;
     const j = await res.json();
-    const list = (a) => (Array.isArray(a) ? a.filter((n) => typeof n === 'string' && n.trim()).map((n) => n.trim()) : []);
-    team = { design: list(j.design), dev: list(j.development || j.dev), product: list(j.product) };
+    const raw = Array.isArray(j) ? j : [].concat(j.design || [], j.development || j.dev || [], j.product || []);
+    team = raw.filter((n) => typeof n === 'string' && n.trim()).map((n) => n.trim());
     renderPeople();
   } catch (e) {} // suggestions are a convenience, the plugin works without them
 }
 
-// Each role gets its own suggestion list: people known for that role first, then everyone else.
+// Every owner field gets the same suggestions; any name can go in any field.
 // Names from team.json can't be removed here (edit the file in the repo instead).
-function suggestionsFor(role) {
-  const first = [], rest = [];
-  const has = (n) => first.indexOf(n) !== -1 || rest.indexOf(n) !== -1;
-  const push = (arr, n) => { if (!has(n)) arr.push(n); };
-  team[role].forEach((n) => push(first, n));
-  filePeople.filter((p) => p.roles.indexOf(role) !== -1).forEach((p) => push(first, p.name));
-  ['design', 'dev', 'product'].forEach((r) => team[r].forEach((n) => push(rest, n)));
-  filePeople.forEach((p) => push(rest, p.name));
-  const inTeam = (n) => ['design', 'dev', 'product'].some((r) => team[r].indexOf(n) !== -1);
-  const fp = (n) => filePeople.find((p) => p.name === n);
-  return first.concat(rest.sort((a, b) => a.localeCompare(b))).map((name) => ({
-    name, removable: !inTeam(name) && !!fp(name) && fp(name).removable
-  }));
+function suggestions() {
+  const names = [];
+  team.concat(filePeople.map((p) => p.name)).forEach((n) => { if (names.indexOf(n) === -1) names.push(n); });
+  const removable = (n) => team.indexOf(n) === -1 && filePeople.some((p) => p.name === n && p.removable);
+  return names.sort((a, b) => a.localeCompare(b, 'tr')).map((name) => ({ name, removable: removable(name) }));
 }
 
 function renderPeople() {
@@ -626,7 +614,7 @@ function hideSuggest() {
 function showSuggest(input, role, box, commit) {
   Object.assign(suggest, { input, role, box, commit });
   const q = input.value.trim().toLocaleLowerCase('tr');
-  suggest.items = suggestionsFor(role)
+  suggest.items = suggestions()
     .filter((p) => form.owners[role].indexOf(p.name) === -1)
     .filter((p) => !q || p.name.toLocaleLowerCase('tr').indexOf(q) !== -1)
     .slice(0, 8);
@@ -668,14 +656,13 @@ function showSuggest(input, role, box, commit) {
 
 function emptyForm(me) {
   return {
-    status: 'wip', lang: defaultCardLang,
+    status: 'wip',
     owners: { design: me ? [me] : [], dev: [], product: [] }, jira: [], slack: [], notes: ''
   };
 }
 function formFromSpec(s) {
   return {
     status: s.status,
-    lang: s.lang === 'tr' ? 'tr' : 'en',
     owners: { design: s.owners.design.slice(), dev: s.owners.dev.slice(), product: s.owners.product.slice() },
     jira: s.jira.slice(), slack: s.slack.slice(), notes: s.notes
   };
@@ -697,7 +684,6 @@ function markDirty() {
 
 function renderStatus() {
   document.querySelectorAll('#statusSeg button').forEach((b) => b.classList.toggle('on', b.dataset.status === form.status));
-  document.querySelectorAll('[data-card-lang]').forEach((b) => b.classList.toggle('on', b.dataset.cardLang === form.lang));
 }
 
 function renderChips() {
@@ -794,9 +780,9 @@ function renderFooter() {
 }
 
 function renderTarget(m) {
-  $('targetIco').innerHTML = ICONS[m.target.kind];
+  $('targetIco').innerHTML = ICONS.Section;
   $('targetName').textContent = m.target.name;
-  $('targetSub').textContent = m.target.kind + ' · ' + (m.target.section ? t().inSection(m.target.section) : m.target.page);
+  $('targetSub').textContent = 'Section · ' + (m.target.section ? t().inSection(m.target.section) : m.target.page);
   $('badge').textContent = m.spec ? t().statusLong[m.spec.status] : t().noSpec;
 }
 
@@ -817,8 +803,9 @@ function render(m) {
     editing = null;
     body.add('no-target');
     body.remove('has-target');
-    $('phTitle').textContent = m.status === 'multiple' ? t().multiTitle : t().emptyTitle;
-    $('phText').textContent = m.status === 'multiple' ? t().multiText(m.count) : t().emptyText;
+    const key = m.status === 'multiple' ? 'multi' : m.status === 'frame' ? 'frame' : 'empty';
+    $('phTitle').textContent = t()[key + 'Title'];
+    $('phText').textContent = key === 'multi' ? t().multiText(m.count) : t()[key + 'Text'];
     return;
   }
 
@@ -841,7 +828,6 @@ function render(m) {
 function collect() {
   return {
     status: form.status,
-    lang: form.lang,
     owners: form.owners,
     jira: form.jira,
     slack: form.slack,
@@ -964,7 +950,7 @@ async function checkVersion(silent) {
     const latest = (await res.json()).version;
     if (typeof latest !== 'string' || !/^\d+\.\d+\.\d+$/.test(latest)) throw new Error('Bad version');
     remoteVersion = latest;
-    console.log('[Pyde spec] installed v' + VERSION + ', GitHub v' + latest);
+    console.log('[Pyde ReadMe] installed v' + VERSION + ', GitHub v' + latest);
     if (isOlder(VERSION, latest)) {
       latestVersion = latest;
       cl.add('outdated');
@@ -1017,9 +1003,6 @@ $('closeSettings').onclick = () => document.body.classList.remove('settings-open
 document.querySelectorAll('[data-lang]').forEach((b) => {
   b.onclick = () => { lang = b.dataset.lang; send({ type: 'setLang', lang }); applyLang(); };
 });
-document.querySelectorAll('[data-card-lang]').forEach((b) => {
-  b.onclick = () => { form.lang = b.dataset.cardLang; markDirty(); renderStatus(); };
-});
 document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save();
 });
@@ -1029,7 +1012,6 @@ onmessage = (e) => {
   if (!m) return;
   if (m.type === 'prefs') {
     lang = m.lang === 'tr' ? 'tr' : 'en';
-    defaultCardLang = m.cardLang === 'tr' ? 'tr' : 'en';
     applyLang();
     document.body.classList.remove('loading');
   } else if (m.type === 'state') {

@@ -1,20 +1,23 @@
-// Design spec cards: a structured note attached to a section (or root frame) that developers
+// Design ReadMe ("Tasarım Künyesi"): a structured note attached to a section that developers
 // and their AI agents (Claude via Figma MCP) read before implementing the design.
 //
-// The spec lives in two places:
-//  - as JSON in shared plugin data on the target node (source of truth, read by this plugin)
-//  - as a normal frame of plain text layers (the "card"), so Figma MCP / Dev Mode can read it
-// The card sits inside the section it documents. For a root frame (a screen) it sits next to
-// the frame, because putting it inside the screen would make it look like part of the UI.
+// The ReadMe lives in two places:
+//  - as JSON in shared plugin data on the section (source of truth, read by this plugin)
+//  - as a normal frame of plain text layers inside the section (the "card"), so Figma MCP and
+//    Dev Mode read it whenever they read the section
+// The card is always written in English, whatever the plugin's interface language is.
+//
+// Storage keys still say "spec" (the plugin's earlier name) so existing files keep working.
 const NS = 'pydespec'; // namespace may only contain letters and digits
 const KEY = 'spec';
 const CARD_KEY = 'card';
-const IDX_PREFIX = 'idx:'; // per-target index entries on the document root, used by the overview
+const IDX_PREFIX = 'idx:'; // per-section index entries on the document root, used by the overview
+const CARD_NAME = '📋 Design ReadMe';
 
 figma.showUI(__html__, { width: 360, height: 640, themeColors: true });
 
 // `color` is the status pill on the card.
-// `emoji` goes into the target's layer name (see syncName).
+// `emoji` goes into the section's layer name (see syncName).
 const STATUSES = {
   wip: { label: 'Work in progress', emoji: '🚧', color: '#D97706' },
   review: { label: 'In review', emoji: '👀', color: '#7C5CFF' },
@@ -39,57 +42,42 @@ function pageOf(node) {
   return n;
 }
 function pad(n) { return (n < 10 ? '0' : '') + n; }
-function fmtDate(ts, L) {
+function fmtDate(ts) {
   const d = new Date(ts);
-  const M = L.months;
+  const M = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return d.getDate() + ' ' + M[d.getMonth()] + ' ' + d.getFullYear() + ', ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
 }
 
-// ---------- Targets & cards ----------
+// ---------- Sections & cards ----------
 
 function isCard(node) {
   return node.type === 'FRAME' && node.getSharedPluginData(NS, CARD_KEY) !== '';
 }
 function cardInfo(card) {
-  try { return JSON.parse(card.getSharedPluginData(NS, CARD_KEY)); } catch (e) { return {}; }
+  try { return JSON.parse(card.getSharedPluginData(NS, CARD_KEY)) || {}; } catch (e) { return {}; }
+}
+// Earlier versions could also attach a card to a frame (kind 'frame', placed next to it).
+// Those are left alone: they never count as the card of the section they happen to sit in.
+function isSectionCard(node) {
+  return isCard(node) && cardInfo(node).kind !== 'frame';
 }
 
-// A spec attaches to a section, or to a root frame (directly on the page or directly in a section).
-function isValidTarget(node) {
-  if (node.type === 'SECTION') return true;
-  return node.type === 'FRAME' && !isCard(node) && !!node.parent &&
-    (node.parent.type === 'PAGE' || node.parent.type === 'SECTION');
-}
-
-// Resolves a selected node to its spec target. Selecting the card (or anything inside it)
-// resolves to the node the card documents, so the relaunch button works from the card too.
-async function resolveTarget(node) {
+// Resolves a selected node to its section. Selecting the card (or anything inside it) resolves
+// to the section it sits in, so the relaunch button works from the card too.
+function resolveTarget(node) {
   for (let n = node; n && n.type !== 'PAGE' && n.type !== 'DOCUMENT'; n = n.parent) {
-    if (isCard(n)) {
-      const info = cardInfo(n);
-      // Section cards always document the section they sit in. This also keeps copied
-      // sections correct, where the copied card still holds the original section's id.
-      if (info.kind === 'section') return n.parent && n.parent.type === 'SECTION' ? n.parent : null;
-      const t = info.targetId ? await figma.getNodeByIdAsync(info.targetId) : null;
-      return t && isValidTarget(t) ? t : null;
-    }
+    if (isCard(n)) return isSectionCard(n) && n.parent && n.parent.type === 'SECTION' ? n.parent : null;
   }
-  return isValidTarget(node) ? node : null;
+  return node.type === 'SECTION' ? node : null;
 }
 
-async function findCard(target, data) {
-  if (target.type === 'SECTION') {
-    const card = target.children.find(isCard);
-    if (card && cardInfo(card).targetId !== target.id) {
-      card.setSharedPluginData(NS, CARD_KEY, JSON.stringify({ kind: 'section', targetId: target.id }));
-    }
-    return card || null;
+function findCard(section) {
+  const card = section.children.find(isSectionCard);
+  // A copied section carries a copy of the card that still points at the original section.
+  if (card && cardInfo(card).targetId !== section.id) {
+    card.setSharedPluginData(NS, CARD_KEY, JSON.stringify({ kind: 'section', targetId: section.id }));
   }
-  if (data && data.cardId) {
-    const card = await figma.getNodeByIdAsync(data.cardId);
-    if (card && !card.removed && isCard(card) && cardInfo(card).targetId === target.id) return card;
-  }
-  return null;
+  return card || null;
 }
 
 function readSpec(node) {
@@ -109,10 +97,8 @@ function readSpec(node) {
       jira: Array.isArray(d.jira) ? d.jira : [],
       slack: Array.isArray(d.slack) ? d.slack : [],
       notes: typeof d.notes === 'string' ? d.notes : '',
-      lang: CARD_TEXT[d.lang] ? d.lang : legacyFileLang(),
       by: d.by || null,
       at: d.at || null,
-      cardId: d.cardId || null,
       ready: d.ready ? { at: d.ready.at, by: d.ready.by } : null // when, and by whom, it was marked Ready
     };
   } catch (e) {
@@ -127,7 +113,7 @@ function writeSpec(node, data) {
 
 // Ink colors are translucent black over the sticky note's paper color.
 const STICKY = '#FFEFA6';
-const C = { link: '#2B49D6' };
+const LINK = '#2B49D6';
 const INK = { text: 1, secondary: 0.62, tertiary: 0.4 };
 const FONTS = {
   regular: { family: 'Inter', style: 'Regular' },
@@ -176,26 +162,28 @@ function heading(parent, label) {
   t.letterSpacing = { unit: 'PERCENT', value: 6 };
 }
 
-function row(parent, label, value, empty) {
-  const r = put(parent, stack(label, 'HORIZONTAL', 12), true);
-  const l = put(r, text(label, 'medium', 13, 'secondary', 'Label'));
-  l.resize(128, l.height);
+function label(parent, chars) {
+  const l = put(parent, text(chars, 'medium', 13, 'secondary', 'Label'));
+  l.resize(104, l.height);
   l.textAutoResize = 'HEIGHT';
+}
+
+function row(parent, name, value, empty) {
+  const r = put(parent, stack(name, 'HORIZONTAL', 12), true);
+  label(r, name);
   put(r, text(value || empty, 'regular', 13, value ? 'text' : 'tertiary', 'Value'), true);
 }
 
-function links(parent, label, urls, none) {
-  const r = put(parent, stack(label, 'HORIZONTAL', 12), true);
-  const l = put(r, text(label, 'medium', 13, 'secondary', 'Label'));
-  l.resize(128, l.height);
-  l.textAutoResize = 'HEIGHT';
+function links(parent, name, urls) {
+  const r = put(parent, stack(name, 'HORIZONTAL', 12), true);
+  label(r, name);
   const col = put(r, stack('Links', 'VERTICAL', 4), true);
   if (!urls.length) {
-    put(col, text(none, 'regular', 13, 'tertiary', 'Value'), true);
+    put(col, text('None', 'regular', 13, 'tertiary', 'Value'), true);
     return;
   }
   for (const url of urls) {
-    const t = put(col, text(url, 'regular', 13, C.link, 'Link'), true);
+    const t = put(col, text(url, 'regular', 13, LINK, 'Link'), true);
     try {
       t.setRangeHyperlink(0, url.length, { type: 'URL', value: url });
       t.textDecoration = 'UNDERLINE';
@@ -203,48 +191,11 @@ function links(parent, label, urls, none) {
   }
 }
 
-// Text on the card, per card language. The card's own layer name stays in English in every
-// language, so the "📋 Design Spec — …" name developers tell Claude to look for never changes.
-const CARD_TEXT = {
-  en: {
-    eyebrow: '📋 DESIGN SPEC',
-    status: { wip: 'Work in progress', review: 'In review', ready: 'Ready for development' },
-    about: (isSection) => 'Documents the ' + (isSection ? 'section this card sits in' : 'screen next to this card') +
-      '. Developers and AI agents (e.g. Claude): read this card before implementing the design.',
-    hStatus: 'Status', hOwners: 'Owners', hLinks: 'Links', hNotes: 'Notes',
-    rStatus: 'Status', readySince: 'Ready since',
-    design: 'Design', dev: 'Development', product: 'Product', notAssigned: 'Not assigned',
-    none: 'None', noNotes: 'No notes.',
-    updated: (by, date) => 'Last updated by ' + by + ' · ' + date,
-    months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-  },
-  tr: {
-    eyebrow: '📋 TASARIM SPEC',
-    status: { wip: 'Devam ediyor', review: 'İncelemede', ready: 'Geliştirmeye hazır' },
-    about: (isSection) => (isSection ? 'Bu kartın içinde bulunduğu section’ı' : 'Bu kartın yanındaki ekranı') +
-      ' belgeler. Geliştiriciler ve yapay zekâ asistanları (ör. Claude): tasarımı geliştirmeden önce bu kartı okuyun.',
-    hStatus: 'Durum', hOwners: 'Sorumlular', hLinks: 'Linkler', hNotes: 'Notlar',
-    rStatus: 'Durum', readySince: 'Hazır olduğu tarih',
-    design: 'Tasarım', dev: 'Geliştirme', product: 'Ürün', notAssigned: 'Atanmadı',
-    none: 'Yok', noNotes: 'Not yok.',
-    updated: (by, date) => 'Son güncelleyen: ' + by + ' · ' + date,
-    months: ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
-  }
-};
-
-// Each spec picks its own card language (spec.lang). v1.7.0 had one language per file;
-// specs saved before this keep that file language until they are saved again.
-function legacyFileLang() {
-  const v = figma.root.getSharedPluginData(NS, 'cardLang');
-  return CARD_TEXT[v] ? v : 'en';
-}
-
-function renderCard(card, target, data) {
+function renderCard(card, section, data) {
   const st = STATUSES[data.status];
-  const L = CARD_TEXT[data.lang] || CARD_TEXT.en;
   for (const c of card.children.slice()) c.remove();
 
-  card.name = '📋 Design Spec — ' + baseName(target);
+  card.name = CARD_NAME + ' — ' + baseName(section);
   card.layoutMode = 'VERTICAL';
   card.primaryAxisSizingMode = 'AUTO';
   card.counterAxisSizingMode = 'FIXED';
@@ -262,53 +213,55 @@ function renderCard(card, target, data) {
       radius: 24, spread: -4, visible: true, blendMode: 'NORMAL' }
   ];
 
-  // Header: eyebrow + status pill, then the target name and a one-line instruction for readers.
+  // Header: eyebrow + status pill, then the section name and a one-line instruction for readers.
   const top = put(card, stack('Header', 'HORIZONTAL', 12), true);
   top.primaryAxisAlignItems = 'SPACE_BETWEEN';
   top.counterAxisAlignItems = 'CENTER';
-  put(top, text(L.eyebrow, 'bold', 12, 'secondary', 'Eyebrow'));
+  put(top, text('📋 DESIGN README', 'bold', 12, 'secondary', 'Eyebrow'));
   const pill = put(top, stack('Status', 'HORIZONTAL', 0));
   pill.paddingTop = pill.paddingBottom = 5;
   pill.paddingLeft = pill.paddingRight = 12;
   pill.cornerRadius = 999;
   pill.fills = [solid(st.color)];
-  put(pill, text(L.status[data.status], 'bold', 12, '#FFFFFF', 'Status label'));
+  put(pill, text(st.label, 'bold', 12, '#FFFFFF', 'Status label'));
 
   const titles = put(card, stack('Title', 'VERTICAL', 6), true);
-  put(titles, text(baseName(target), 'bold', 22, 'text', 'Name'), true);
-  put(titles, text(L.about(target.type === 'SECTION'), 'regular', 12, 'secondary', 'About'), true);
+  put(titles, text(baseName(section), 'bold', 22, 'text', 'Name'), true);
+  put(titles, text(
+    'Documents the section this card sits in. Developers and AI agents (e.g. Claude): read this card before implementing the design.',
+    'regular', 12, 'secondary', 'About'), true);
 
   const status = put(card, stack('Status details', 'VERTICAL', 8), true);
-  heading(status, L.hStatus);
-  row(status, L.rStatus, L.status[data.status], '');
+  heading(status, 'Status');
+  row(status, 'Status', st.label, '');
   if (data.status === 'ready' && data.ready) {
-    row(status, L.readySince, fmtDate(data.ready.at, L) + ' · ' + data.ready.by, '');
+    row(status, 'Ready since', fmtDate(data.ready.at) + ' · ' + data.ready.by, '');
   }
 
   const owners = put(card, stack('Owners', 'VERTICAL', 8), true);
-  heading(owners, L.hOwners);
-  row(owners, L.design, data.owners.design.join(', '), L.notAssigned);
-  row(owners, L.dev, data.owners.dev.join(', '), L.notAssigned);
-  row(owners, L.product, data.owners.product.join(', '), L.notAssigned);
+  heading(owners, 'Owners');
+  row(owners, 'Design', data.owners.design.join(', '), 'Not assigned');
+  row(owners, 'Development', data.owners.dev.join(', '), 'Not assigned');
+  row(owners, 'Product', data.owners.product.join(', '), 'Not assigned');
 
   const ls = put(card, stack('Links', 'VERTICAL', 8), true);
-  heading(ls, L.hLinks);
-  links(ls, 'Jira', data.jira, L.none);
-  links(ls, 'Slack', data.slack, L.none);
+  heading(ls, 'Links');
+  links(ls, 'Jira', data.jira);
+  links(ls, 'Slack', data.slack);
 
   const notes = put(card, stack('Notes', 'VERTICAL', 8), true);
-  heading(notes, L.hNotes);
-  put(notes, text(data.notes.trim() || L.noNotes, 'regular', 14, data.notes.trim() ? 'text' : 'tertiary', 'Notes'), true);
+  heading(notes, 'Notes');
+  put(notes, text(data.notes.trim() || 'No notes.', 'regular', 14, data.notes.trim() ? 'text' : 'tertiary', 'Notes'), true);
 
   const line = figma.createRectangle();
   line.name = 'Divider';
   line.resize(10, 1);
   line.fills = [solid('#1E1E1E', 0.12)];
   put(card, line, true);
-  put(card, text(L.updated(data.by, fmtDate(data.at, L)), 'regular', 11, 'tertiary', 'Last updated'), true);
+  put(card, text('Last updated by ' + data.by + ' · ' + fmtDate(data.at), 'regular', 11, 'tertiary', 'Last updated'), true);
 }
 
-const CARD_INSET = 96; // a section card sits this far from the section's left and top edges
+const CARD_INSET = 96; // the card sits this far from the section's left and top edges
 const CARD_GAP = 96;   // minimum space between the card and the content below it
 
 // Grows a section so the card fits inside it, with breathing room.
@@ -328,55 +281,47 @@ function shiftContent(section, card, dy, onlyBelow) {
   section.resizeWithoutConstraints(section.width, Math.max(1, section.height + dy));
 }
 
-function placeNewCard(card, target) {
-  if (target.type === 'SECTION') {
-    // Top-left corner; everything else moves down so it starts CARD_GAP below the card.
-    card.x = CARD_INSET;
-    card.y = CARD_INSET;
-    const others = target.children.filter((c) => c.id !== card.id);
-    if (others.length) {
-      const top = Math.min.apply(null, others.map((c) => c.y));
-      const dy = card.y + card.height + CARD_GAP - top;
-      if (dy > 0) shiftContent(target, card, dy);
-    }
-  } else {
-    card.x = target.x + target.width + 80;
-    card.y = target.y;
+// Top-left corner; everything else moves down so it starts CARD_GAP below the card.
+function placeNewCard(card, section) {
+  card.x = CARD_INSET;
+  card.y = CARD_INSET;
+  const others = section.children.filter((c) => c.id !== card.id);
+  if (others.length) {
+    const top = Math.min.apply(null, others.map((c) => c.y));
+    const dy = card.y + card.height + CARD_GAP - top;
+    if (dy > 0) shiftContent(section, card, dy);
   }
 }
 
-async function upsertCard(target, data) {
-  let card = await findCard(target, data);
+function upsertCard(section, data) {
+  let card = findCard(section);
   const isNew = !card;
   if (isNew) {
     card = figma.createFrame();
-    const parent = target.type === 'SECTION' ? target : target.parent;
-    parent.appendChild(card);
+    section.appendChild(card);
   }
-  card.setSharedPluginData(NS, CARD_KEY, JSON.stringify({
-    kind: target.type === 'SECTION' ? 'section' : 'frame', targetId: target.id
-  }));
+  card.setSharedPluginData(NS, CARD_KEY, JSON.stringify({ kind: 'section', targetId: section.id }));
   const oldBottom = isNew ? 0 : card.y + card.height;
-  renderCard(card, target, data);
+  renderCard(card, section, data);
   if (isNew) {
-    placeNewCard(card, target);
-  } else if (target.type === 'SECTION' && card.x === CARD_INSET && card.y === CARD_INSET) {
+    placeNewCard(card, section);
+  } else if (card.x === CARD_INSET && card.y === CARD_INSET) {
     // The card got taller or shorter: move the content below it by the same amount,
     // so the space between them stays as it was. Skipped if someone moved the card
     // (or it was placed by an older version), since then it isn't above the content.
-    shiftContent(target, card, card.y + card.height - oldBottom, oldBottom);
+    shiftContent(section, card, card.y + card.height - oldBottom, oldBottom);
   }
-  if (card.parent && card.parent.type === 'SECTION') fitSection(card.parent, card);
+  fitSection(section, card);
   return card;
 }
 
-function setRelaunch(target, card, data) {
-  const d = { edit: 'Design spec · ' + STATUSES[data.status].label };
-  target.setRelaunchData(d);
+function setRelaunch(section, card, data) {
+  const d = { edit: 'Design ReadMe · ' + STATUSES[data.status].label };
+  section.setRelaunchData(d);
   if (card) card.setRelaunchData(d);
 }
 
-// The target's layer name shows its status after an em dash, e.g. "Checkout Flow — ✅ Ready for development",
+// The section's layer name shows its status after an em dash, e.g. "Checkout Flow — ✅ Ready for development",
 // so the status is visible on the canvas, in the layers panel and to anyone reading the file via Figma MCP.
 const NAME_SEP = ' — ';
 const LEGACY_READY_PREFIX = '✅ Ready · '; // used by v1.3.0
@@ -393,19 +338,19 @@ function baseName(node) {
   }
   return name;
 }
-// `status` null removes the suffix (spec removed).
-function syncName(target, status) {
-  const name = baseName(target) + (status ? statusSuffix(status) : '');
-  if (target.name !== name) target.name = name;
+// `status` null removes the suffix (ReadMe removed).
+function syncName(section, status) {
+  const name = baseName(section) + (status ? statusSuffix(status) : '');
+  if (section.name !== name) section.name = name;
 }
 
 // ---------- Overview index ----------
-// One key per target on the document root, so two people saving at once never overwrite each other.
+// One key per section on the document root, so two people saving at once never overwrite each other.
 
-function writeIndex(target, data) {
-  const p = pageOf(target);
-  figma.root.setSharedPluginData(NS, IDX_PREFIX + target.id, JSON.stringify({
-    id: target.id, name: baseName(target), kind: target.type === 'SECTION' ? 'Section' : 'Frame',
+function writeIndex(section, data) {
+  const p = pageOf(section);
+  figma.root.setSharedPluginData(NS, IDX_PREFIX + section.id, JSON.stringify({
+    id: section.id, name: baseName(section),
     pageId: p ? p.id : null, pageName: p ? p.name : '',
     status: data.status, by: data.by, at: data.at
   }));
@@ -429,17 +374,17 @@ function readIndex() {
 async function rescanPage(page) {
   await page.loadAsync();
   const nodes = page.findAllWithCriteria({
-    types: ['SECTION', 'FRAME'],
+    types: ['SECTION'],
     sharedPluginData: { namespace: NS, keys: [KEY] }
   });
   const found = new Set();
   for (const n of nodes) {
-    if (!isValidTarget(n)) continue;
     const data = readSpec(n);
     if (!data) continue;
     found.add(n.id);
     writeIndex(n, data);
   }
+  // Also drops entries for frames, which earlier versions allowed as targets.
   for (const e of readIndex()) {
     if (e.pageId === page.id && !found.has(e.id)) removeIndex(e.id);
   }
@@ -452,38 +397,35 @@ async function sendOverview() {
 
 // ---------- State ----------
 
-let pushSeq = 0;
-
-async function pushState() {
-  const seq = ++pushSeq;
+function pushState() {
   const seen = new Set();
-  const targets = [];
+  const sections = [];
   for (const n of figma.currentPage.selection) {
-    const t = await resolveTarget(n);
-    if (t && !seen.has(t.id)) { seen.add(t.id); targets.push(t); }
+    const s = resolveTarget(n);
+    if (s && !seen.has(s.id)) { seen.add(s.id); sections.push(s); }
   }
-  if (seq !== pushSeq) return;
 
-  if (targets.length !== 1) {
-    figma.ui.postMessage({ type: 'state', status: targets.length ? 'multiple' : 'none', count: targets.length });
+  if (sections.length !== 1) {
+    // Tell the UI when a frame is selected, so it can explain that only sections get a ReadMe.
+    const frame = !sections.length && figma.currentPage.selection.some((n) => n.type === 'FRAME');
+    figma.ui.postMessage({
+      type: 'state', status: sections.length ? 'multiple' : frame ? 'frame' : 'none', count: sections.length
+    });
     return;
   }
 
-  const t = targets[0];
-  const data = readSpec(t);
-
-  const p = pageOf(t);
+  const s = sections[0];
+  const p = pageOf(s);
   figma.ui.postMessage({
     type: 'state',
     status: 'ok',
     target: {
-      id: t.id,
-      name: baseName(t),
-      kind: t.type === 'SECTION' ? 'Section' : 'Frame',
-      section: t.parent && t.parent.type === 'SECTION' ? t.parent.name : null,
+      id: s.id,
+      name: baseName(s),
+      section: s.parent && s.parent.type === 'SECTION' ? baseName(s.parent) : null,
       page: p ? p.name : ''
     },
-    spec: data,
+    spec: readSpec(s),
     me: userName()
   });
 }
@@ -492,79 +434,63 @@ figma.on('selectionchange', () => pushState());
 figma.on('currentpagechange', () => pushState());
 
 // ---------- People suggestions ----------
+// Figma only exposes the people who have this file open right now (activeUsers), so suggestions
+// are built from several sources. The UI adds the team list from team.json on GitHub.
+//  - every owner ever saved in a ReadMe in this file (shared, so the whole team sees them)
+//  - names this user typed before, in any file (local)
+//  - people currently in the file, and the current user
+// Names aren't tied to a role: any name can go in any owner field.
 
 const PEOPLE_KEY = 'pyde-spec-people';
 const LANG_KEY = 'pyde-spec-lang';
-const CARD_LANG_PREF = 'pyde-spec-card-lang'; // the card language this user picked last, used for new specs
+const PERSON_PREFIX = 'person:'; // one key per name on the document root
 let lang = 'en';
 
-// Figma only exposes the people who have this file open right now (activeUsers), so suggestions
-// are built from several sources. The UI adds the team roster from team.json on GitHub.
-//  - every owner ever saved in a spec in this file (shared, so the whole team sees them)
-//  - names this user typed before, in any file (local)
-//  - people currently in the file, and the current user
-const PERSON_PREFIX = 'person:';
+function ownersOf(data) {
+  return data.owners.design.concat(data.owners.dev, data.owners.product);
+}
 
-// One key per name on the document root, storing which roles the person was assigned to.
 function registerPeople(data) {
-  const roles = ['design', 'dev', 'product'];
-  for (const role of roles) {
-    for (const name of data.owners[role]) {
-      const key = PERSON_PREFIX + name;
-      let known = [];
-      try { known = JSON.parse(figma.root.getSharedPluginData(NS, key) || '[]'); } catch (e) {}
-      if (known.indexOf(role) === -1) {
-        known.push(role);
-        figma.root.setSharedPluginData(NS, key, JSON.stringify(known));
-      }
+  for (const name of ownersOf(data)) {
+    if (!figma.root.getSharedPluginData(NS, PERSON_PREFIX + name)) {
+      figma.root.setSharedPluginData(NS, PERSON_PREFIX + name, '1');
     }
   }
 }
 
-async function people() {
-  const map = {}; // name -> roles
-  const add = (name, roles) => {
-    if (!name) return;
-    map[name] = map[name] || [];
-    (roles || []).forEach((r) => { if (map[name].indexOf(r) === -1) map[name].push(r); });
-  };
-  for (const k of figma.root.getSharedPluginDataKeys(NS)) {
-    if (k.indexOf(PERSON_PREFIX) !== 0) continue;
-    let roles = [];
-    try { roles = JSON.parse(figma.root.getSharedPluginData(NS, k) || '[]'); } catch (e) {}
-    add(k.slice(PERSON_PREFIX.length), roles);
-  }
+// Earlier versions stored { name, roles } objects locally; only the name matters now.
+async function savedNames() {
   const saved = await figma.clientStorage.getAsync(PEOPLE_KEY);
-  if (Array.isArray(saved)) saved.forEach((p) => typeof p === 'string' ? add(p) : add(p.name, p.roles));
+  return Array.isArray(saved) ? saved.map((p) => (typeof p === 'string' ? p : p && p.name)).filter(Boolean) : [];
+}
+
+async function people() {
+  const names = new Set();
+  for (const k of figma.root.getSharedPluginDataKeys(NS)) {
+    if (k.indexOf(PERSON_PREFIX) === 0) names.add(k.slice(PERSON_PREFIX.length));
+  }
+  (await savedNames()).forEach((n) => names.add(n));
   // Stored names can be removed from the suggestions; people who are here right now can't
   // (they would come straight back).
   const present = new Set();
   try { figma.activeUsers.forEach((u) => u.name && present.add(u.name)); } catch (e) {}
   if (figma.currentUser) present.add(figma.currentUser.name);
-  present.forEach((n) => add(n));
-  return Object.keys(map).sort((a, b) => a.localeCompare(b))
-    .map((name) => ({ name, roles: map[name], removable: !present.has(name) }));
+  present.forEach((n) => names.add(n));
+  return Array.from(names).sort((a, b) => a.localeCompare(b))
+    .map((name) => ({ name, removable: !present.has(name) }));
 }
 
 // Removes a name from the suggestions (file list and this user's local list).
-// Specs that already list the person are left untouched.
+// ReadMes that already list the person are left untouched.
 async function forgetPerson(name) {
   figma.root.setSharedPluginData(NS, PERSON_PREFIX + name, '');
-  const saved = (await figma.clientStorage.getAsync(PEOPLE_KEY)) || [];
-  await figma.clientStorage.setAsync(PEOPLE_KEY, saved.filter((p) => (typeof p === 'string' ? p : p.name) !== name));
+  await figma.clientStorage.setAsync(PEOPLE_KEY, (await savedNames()).filter((n) => n !== name));
 }
 
 async function rememberPeople(data) {
-  const saved = (await figma.clientStorage.getAsync(PEOPLE_KEY)) || [];
-  const list = saved.map((p) => (typeof p === 'string' ? { name: p, roles: [] } : p));
-  for (const role of ['design', 'dev', 'product']) {
-    for (const name of data.owners[role]) {
-      let p = list.find((x) => x.name === name);
-      if (!p) { p = { name, roles: [] }; list.unshift(p); }
-      if (p.roles.indexOf(role) === -1) p.roles.push(role);
-    }
-  }
-  await figma.clientStorage.setAsync(PEOPLE_KEY, list.slice(0, 150));
+  const used = ownersOf(data);
+  const merged = used.concat((await savedNames()).filter((n) => used.indexOf(n) === -1));
+  await figma.clientStorage.setAsync(PEOPLE_KEY, merged.slice(0, 150));
 }
 
 async function sendPeople() {
@@ -581,17 +507,17 @@ function cleanUrls(a) {
 }
 function t(en, tr) { return lang === 'tr' ? tr : en; }
 
-async function getTarget(id) {
+async function getSection(id) {
   const node = id ? await figma.getNodeByIdAsync(id) : null;
-  if (!node || node.removed || !isValidTarget(node)) {
-    figma.notify(t('The section or frame no longer exists.', 'Section veya frame artık yok.'), { error: true });
+  if (!node || node.removed || node.type !== 'SECTION') {
+    figma.notify(t('The section no longer exists.', 'Section artık yok.'), { error: true });
     return null;
   }
   return node;
 }
 
 async function save(msg) {
-  const node = await getTarget(msg.id);
+  const node = await getSection(msg.id);
   if (!node) return;
   const old = readSpec(node);
   const s = msg.spec || {};
@@ -607,10 +533,8 @@ async function save(msg) {
     jira: cleanUrls(s.jira),
     slack: cleanUrls(s.slack),
     notes: typeof s.notes === 'string' ? s.notes : '',
-    lang: CARD_TEXT[s.lang] ? s.lang : 'en',
     by: userName(),
     at: now,
-    cardId: old ? old.cardId : null,
     ready: null
   };
   // "Ready since" keeps its original date while the status stays Ready.
@@ -618,8 +542,7 @@ async function save(msg) {
     data.ready = old && old.status === 'ready' && old.ready ? old.ready : { at: now, by: data.by };
   }
   await ensureFonts();
-  const card = await upsertCard(node, data);
-  data.cardId = card.id;
+  const card = upsertCard(node, data);
   writeSpec(node, data);
   setRelaunch(node, card, data);
   syncName(node, data.status);
@@ -627,21 +550,19 @@ async function save(msg) {
   registerPeople(data);
   await rememberPeople(data);
   await sendPeople();
-  await figma.clientStorage.setAsync(CARD_LANG_PREF, data.lang);
-  figma.notify(t('Design spec saved', 'Design spec kaydedildi'));
+  figma.notify(t('Design ReadMe saved', 'Tasarım künyesi kaydedildi'));
 }
 
 async function remove(msg) {
-  const node = await getTarget(msg.id);
+  const node = await getSection(msg.id);
   if (!node) return;
-  const data = readSpec(node);
-  const card = await findCard(node, data);
+  const card = findCard(node);
   if (card) card.remove();
   node.setSharedPluginData(NS, KEY, '');
   node.setRelaunchData({});
   syncName(node, null);
   removeIndex(node.id);
-  figma.notify(t('Design spec removed', 'Design spec kaldırıldı'));
+  figma.notify(t('Design ReadMe removed', 'Tasarım künyesi kaldırıldı'));
 }
 
 async function goTo(id) {
@@ -662,8 +583,7 @@ figma.ui.onmessage = async (msg) => {
     if (msg.type === 'ready') {
       const saved = await figma.clientStorage.getAsync(LANG_KEY);
       if (saved === 'en' || saved === 'tr') lang = saved;
-      const cardLang = await figma.clientStorage.getAsync(CARD_LANG_PREF);
-      figma.ui.postMessage({ type: 'prefs', lang, cardLang: CARD_TEXT[cardLang] ? cardLang : 'en' });
+      figma.ui.postMessage({ type: 'prefs', lang });
       await sendPeople();
       return pushState();
     }

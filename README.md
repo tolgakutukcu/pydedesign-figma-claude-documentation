@@ -1,6 +1,6 @@
-# Pyde Design Spec
+# Pyde Design ReadMe
 
-A Figma plugin that attaches a **design spec card** to a section (or a root frame). The card holds what developers — and the Claude instance they work with — need to know before implementing the design:
+*Tasarım Künyesi* — a Figma plugin that adds a **Design ReadMe** card to a section. The card holds what developers — and the Claude instance they work with — need to know before implementing the design:
 
 - Status: Work in progress · In review · Ready for development
 - Owners: Design, Development, Product
@@ -8,7 +8,7 @@ A Figma plugin that attaches a **design spec card** to a section (or a root fram
 - Free-text notes
 - Last updated by / when (automatic)
 
-The card looks like a yellow sticky note; the status shows as a colored label on it. It is a normal Figma frame made of plain text layers, so Figma MCP and Dev Mode read it like any other part of the design. The same data is also stored as JSON on the section (shared plugin data, including the section's id), which is what the plugin reads and edits.
+The card looks like a yellow sticky note with a colored status label, and is always written in English. It is a normal Figma frame made of plain text layers, so Figma MCP and Dev Mode read it like any other part of the section. The same data is also stored as JSON on the section (shared plugin data, including the section's id), which is what the plugin reads and edits.
 
 ## Install
 
@@ -17,50 +17,43 @@ The card looks like a yellow sticky note; the status shows as a colored label on
 
 ## Use
 
-1. Select a section (or a frame placed directly on the page / directly inside a section) and run the plugin.
-2. Fill in the form and click **Add spec card**.
-   - For a section, the card is placed **inside** the section, in its top-left corner (96 px from the left and top). The existing content moves down to start 96 px below the card, and the section grows to fit. When the card later gets taller or shorter, the content below it moves with it.
-   - For a frame (a screen), the card is placed next to the frame, so it never looks like part of the UI.
-3. To edit later, select the section or the card and click **Edit design spec** in the right panel (or run the plugin again).
+1. Select a section and run the plugin. A ReadMe can only be added to a section, not to a frame.
+2. Fill in the form and click **Add Design ReadMe**.
+   - The card is placed inside the section, in its top-left corner (96 px from the left and top). The existing content moves down to start 96 px below the card, and the section grows to fit. When the card later gets taller or shorter, the content below it moves with it.
+3. To edit later, select the section or the card and click **Edit Design ReadMe** in the right panel (or run the plugin again).
 
 Don't edit the card's text by hand — it is regenerated from the form on every save.
 
-### Card language
-
-Each spec has its own **Card language** (English or Turkish), chosen in the form. A new spec starts with the language you picked last. The card's layer name (`📋 Design Spec — …`) and the status suffix on the section name stay in English, so the instructions for Claude below keep working. The plugin interface language (Settings) is a separate, personal setting.
+The plugin interface can be switched between English and Turkish in Settings. That only changes the interface for you; the card stays in English.
 
 ### Status in the layer name
 
-The section/frame name shows its status after an em dash, updated on every save:
+The section name shows its status after an em dash, updated on every save:
 
 - `Checkout Flow — 🚧 Work in progress`
 - `Checkout Flow — 👀 In review`
 - `Checkout Flow — ✅ Ready for development`
 
-Removing the spec removes the suffix. Labels and emojis are in `STATUSES` in `code.js`.
+Removing the ReadMe removes the suffix. Labels and emojis are in `STATUSES` in `code.js`.
 
 ### Overview
 
-The **Overview** tab lists every spec in the file with its status. The current page is rescanned each time you open the tab, using Figma's indexed search, so it is fast even in big files. Other pages show their last known state. **Scan all pages** loads every page and refreshes everything; it can take a while in large files.
+The **Overview** tab lists every ReadMe in the file with its status. The current page is rescanned each time you open the tab, using Figma's indexed search, so it is fast even in big files. Other pages show their last known state. **Scan all pages** loads every page and refreshes everything; it can take a while in large files.
 
 ## Owner suggestions
 
-Figma only lets plugins see the people who have the file open right now, so name suggestions are combined from:
+Any name can be typed into any owner field. Figma only lets plugins see the people who have the file open right now, so name suggestions are combined from:
 
-1. **`team.json` in this repo**: the team roster, per role. Edit it and push to `main`; everyone gets the new list the next time they open the plugin (no version bump needed).
-2. Every owner saved in a spec in the current file (shared with the whole team).
+1. **`team.json` in this repo**: a plain list of names. Edit it and push to `main`; everyone gets the new list the next time they open the plugin (no version bump needed).
+2. Every owner saved in a ReadMe in the current file (shared with the whole team).
 3. Names you typed before, in any file (stored only on your machine).
 4. People who currently have the file open, and you.
 
 ```json
-{
-  "design": ["Name Surname"],
-  "development": ["Name Surname"],
-  "product": ["Name Surname"]
-}
+["Name Surname", "Name Surname"]
 ```
 
-Names listed for a role are suggested first in that role's field.
+The repo is public, so `team.json` should only contain names.
 
 ## For developers using Claude Code + Figma MCP
 
@@ -68,9 +61,10 @@ Add this to your project's `CLAUDE.md` so Claude always reads the card:
 
 ```md
 ## Figma designs
-Before implementing a Figma section or screen, look for a layer named "📋 Design Spec — …"
-inside the section (or next to the frame). It contains the status, owners, Jira / Slack links
-and the designer's notes. Treat the notes as requirements.
+Before implementing a Figma section, look for a layer named "📋 Design ReadMe — …" inside it.
+If you were given a frame inside a section, read the parent section's Design ReadMe too.
+It contains the status, owners, Jira / Slack links and the designer's notes.
+Treat the notes as requirements.
 - If the status is not "Ready for development", say so before implementing.
 ```
 

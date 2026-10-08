@@ -1,17 +1,27 @@
 {
-  "name": "Pyde Design Spec",
+  "name": "Pyde Design ReadMe",
   "id": "1000000000000000002",
   "api": "1.0.0",
   "main": "code.js",
   "ui": "ui.html",
-  "editorType": ["figma"],
+  "editorType": [
+    "figma"
+  ],
   "documentAccess": "dynamic-page",
-  "permissions": ["currentuser", "activeusers"],
+  "permissions": [
+    "currentuser",
+    "activeusers"
+  ],
   "relaunchButtons": [
-    { "command": "edit", "name": "Edit design spec" }
+    {
+      "command": "edit",
+      "name": "Edit Design ReadMe"
+    }
   ],
   "networkAccess": {
-    "allowedDomains": ["https://raw.githubusercontent.com"],
-    "reasoning": "Checks the latest plugin version published on GitHub."
+    "allowedDomains": [
+      "https://raw.githubusercontent.com"
+    ],
+    "reasoning": "Checks the latest plugin version and loads the team name list from GitHub."
   }
 }
