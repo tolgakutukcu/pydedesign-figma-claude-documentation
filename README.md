@@ -27,7 +27,7 @@ Don't edit the card's text by hand — it is regenerated from the form on every 
 
 ### Card language
 
-Settings → **Card language (this file)** switches the cards between English and Turkish. It is a file setting: everyone working in the file gets the same language, and changing it re-renders every existing card in the file. The card's layer name (`📋 Design Spec — …`) and the status suffix on the section name stay in English, so the instructions for Claude below keep working. The plugin interface language is a separate, personal setting.
+Each spec has its own **Card language** (English or Turkish), chosen in the form. A new spec starts with the language you picked last. The card's layer name (`📋 Design Spec — …`) and the status suffix on the section name stay in English, so the instructions for Claude below keep working. The plugin interface language (Settings) is a separate, personal setting.
 
 ### Status in the layer name
 

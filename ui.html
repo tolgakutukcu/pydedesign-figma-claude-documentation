@@ -102,7 +102,6 @@
   .seg button[data-status="review"].on { background: var(--review); }
   .seg button[data-status="ready"].on { background: var(--ready); }
   .seg button[data-lang].on, .seg button[data-card-lang].on { background: var(--accent); }
-  .seg button:disabled { opacity: .5; cursor: default; }
   .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
   .dot.wip { background: var(--wip); } .dot.review { background: var(--review); } .dot.ready { background: var(--ready); }
   .seg button.on .dot { background: #fff; }
@@ -350,6 +349,14 @@
         </div>
 
         <div class="field">
+          <div class="lbl" data-i18n="cardLanguage"></div>
+          <div class="seg">
+            <button data-card-lang="en">English</button>
+            <button data-card-lang="tr">Türkçe</button>
+          </div>
+        </div>
+
+        <div class="field">
           <div class="lbl" data-i18n="owners"></div>
           <div class="owner"><span data-i18n="design"></span><div class="chips" data-role="design"></div></div>
           <div class="owner"><span data-i18n="dev"></span><div class="chips" data-role="dev"></div></div>
@@ -425,14 +432,7 @@
         </div>
         <div class="hint" data-i18n="langHint"></div>
       </div>
-      <div>
-        <div class="lbl" data-i18n="cardLanguage"></div>
-        <div class="seg" id="cardLangSeg">
-          <button data-card-lang="en">English</button>
-          <button data-card-lang="tr">Türkçe</button>
-        </div>
-        <div class="hint" data-i18n="cardLangHint"></div>
-      </div>
+
       <div class="s-ver" id="sVer"></div>
     </div>
   </div>
@@ -466,15 +466,14 @@
   </div>
 
 <script>
-const VERSION = '1.7.0';
+const VERSION = '1.8.0';
 const VERSION_URL = 'https://raw.githubusercontent.com/tolgakutukcu/pydedesign-figma-claude-documentation/main/version.json';
 
 const STRINGS = {
   en: {
     settings: 'Settings', back: 'Back', language: 'Language', version: 'Version',
     langHint: 'Only changes the plugin interface, just for you.',
-    cardLanguage: 'Card language (this file)',
-    cardLangHint: 'Language of the spec cards on the canvas. Applies to everyone working in this file; changing it updates all existing cards.',
+    cardLanguage: 'Card language',
     tabSpec: 'Spec', tabOverview: 'Overview',
     emptyTitle: 'Select a section or frame',
     emptyText: 'A spec attaches to a section, or to a frame placed directly on the page or directly inside a section. You can also select an existing spec card.',
@@ -512,8 +511,7 @@ const STRINGS = {
   tr: {
     settings: 'Ayarlar', back: 'Geri', language: 'Dil', version: 'Sürüm',
     langHint: 'Sadece senin için plugin arayüzünün dilini değiştirir.',
-    cardLanguage: 'Kart dili (bu dosya)',
-    cardLangHint: 'Canvas’taki spec kartlarının dili. Bu dosyada çalışan herkes için geçerli; değiştirince mevcut kartların hepsi güncellenir.',
+    cardLanguage: 'Kart dili',
     tabSpec: 'Spec', tabOverview: 'Genel bakış',
     emptyTitle: 'Bir section veya frame seç',
     emptyText: 'Spec; bir section’a ya da doğrudan sayfada veya doğrudan bir section içinde duran bir frame’e bağlanır. Mevcut bir spec kartını da seçebilirsin.',
@@ -572,7 +570,7 @@ let form = null;
 let editing = null; // { id, name, hasSpec, spec }
 let dirty = false;
 let saving = false;
-let cardLang = 'en';
+let defaultCardLang = 'en'; // language for new specs: the one this user picked last
 
 function send(m) { parent.postMessage({ pluginMessage: m }, '*'); }
 
@@ -669,11 +667,15 @@ function showSuggest(input, role, box, commit) {
 }
 
 function emptyForm(me) {
-  return { status: 'wip', owners: { design: me ? [me] : [], dev: [], product: [] }, jira: [], slack: [], notes: '' };
+  return {
+    status: 'wip', lang: defaultCardLang,
+    owners: { design: me ? [me] : [], dev: [], product: [] }, jira: [], slack: [], notes: ''
+  };
 }
 function formFromSpec(s) {
   return {
     status: s.status,
+    lang: s.lang === 'tr' ? 'tr' : 'en',
     owners: { design: s.owners.design.slice(), dev: s.owners.dev.slice(), product: s.owners.product.slice() },
     jira: s.jira.slice(), slack: s.slack.slice(), notes: s.notes
   };
@@ -695,6 +697,7 @@ function markDirty() {
 
 function renderStatus() {
   document.querySelectorAll('#statusSeg button').forEach((b) => b.classList.toggle('on', b.dataset.status === form.status));
+  document.querySelectorAll('[data-card-lang]').forEach((b) => b.classList.toggle('on', b.dataset.cardLang === form.lang));
 }
 
 function renderChips() {
@@ -838,6 +841,7 @@ function render(m) {
 function collect() {
   return {
     status: form.status,
+    lang: form.lang,
     owners: form.owners,
     jira: form.jira,
     slack: form.slack,
@@ -916,20 +920,12 @@ function setView(v) {
 
 // ---------- Language ----------
 
-function renderCardLang() {
-  document.querySelectorAll('[data-card-lang]').forEach((b) => {
-    b.classList.toggle('on', b.dataset.cardLang === cardLang);
-    b.disabled = false;
-  });
-}
-
 function applyLang() {
   document.documentElement.lang = lang;
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = t()[el.dataset.i18n]; });
   document.querySelectorAll('[data-i18n-title]').forEach((el) => { el.title = t()[el.dataset.i18nTitle]; });
   document.querySelectorAll('[data-i18n-placeholder]').forEach((el) => { el.placeholder = t()[el.dataset.i18nPlaceholder]; });
   document.querySelectorAll('[data-lang]').forEach((b) => b.classList.toggle('on', b.dataset.lang === lang));
-  renderCardLang();
   $('sVer').textContent = t().version + ' ' + VERSION + (remoteVersion ? '  ·  GitHub: v' + remoteVersion : '');
   if (latestVersion) $('versions').textContent = t().installed + ': v' + VERSION + '  ·  ' + t().latest + ': v' + latestVersion;
   render(lastState);
@@ -1022,11 +1018,7 @@ document.querySelectorAll('[data-lang]').forEach((b) => {
   b.onclick = () => { lang = b.dataset.lang; send({ type: 'setLang', lang }); applyLang(); };
 });
 document.querySelectorAll('[data-card-lang]').forEach((b) => {
-  b.onclick = () => {
-    if (b.dataset.cardLang === cardLang) return;
-    document.querySelectorAll('[data-card-lang]').forEach((x) => { x.disabled = true; });
-    send({ type: 'setCardLang', lang: b.dataset.cardLang });
-  };
+  b.onclick = () => { form.lang = b.dataset.cardLang; markDirty(); renderStatus(); };
 });
 document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') save();
@@ -1037,16 +1029,13 @@ onmessage = (e) => {
   if (!m) return;
   if (m.type === 'prefs') {
     lang = m.lang === 'tr' ? 'tr' : 'en';
-    cardLang = m.cardLang === 'tr' ? 'tr' : 'en';
+    defaultCardLang = m.cardLang === 'tr' ? 'tr' : 'en';
     applyLang();
     document.body.classList.remove('loading');
   } else if (m.type === 'state') {
     // While saving, keep the form as it is; the state that follows 'saved' fills it in.
     if (saving) { lastState = m; return; }
     render(m);
-  } else if (m.type === 'cardLang') {
-    cardLang = m.cardLang;
-    renderCardLang();
   } else if (m.type === 'saved') {
     saving = false;
     dirty = false;
@@ -1060,7 +1049,6 @@ onmessage = (e) => {
     renderOverview();
   } else if (m.type === 'error') {
     saving = false;
-    renderCardLang();
     $('scanAll').textContent = t().scanAll;
     $('scanAll').disabled = false;
     renderFooter();

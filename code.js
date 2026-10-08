@@ -109,6 +109,7 @@ function readSpec(node) {
       jira: Array.isArray(d.jira) ? d.jira : [],
       slack: Array.isArray(d.slack) ? d.slack : [],
       notes: typeof d.notes === 'string' ? d.notes : '',
+      lang: CARD_TEXT[d.lang] ? d.lang : legacyFileLang(),
       by: d.by || null,
       at: d.at || null,
       cardId: d.cardId || null,
@@ -231,17 +232,16 @@ const CARD_TEXT = {
   }
 };
 
-// The card language is a file setting (stored on the document), so every card in a file
-// is in the same language no matter who saves it.
-const CARD_LANG_KEY = 'cardLang';
-function cardLang() {
-  const v = figma.root.getSharedPluginData(NS, CARD_LANG_KEY);
+// Each spec picks its own card language (spec.lang). v1.7.0 had one language per file;
+// specs saved before this keep that file language until they are saved again.
+function legacyFileLang() {
+  const v = figma.root.getSharedPluginData(NS, 'cardLang');
   return CARD_TEXT[v] ? v : 'en';
 }
 
 function renderCard(card, target, data) {
   const st = STATUSES[data.status];
-  const L = CARD_TEXT[cardLang()];
+  const L = CARD_TEXT[data.lang] || CARD_TEXT.en;
   for (const c of card.children.slice()) c.remove();
 
   card.name = '📋 Design Spec — ' + baseName(target);
@@ -445,23 +445,6 @@ async function rescanPage(page) {
   }
 }
 
-// Re-renders every card in the file in the current card language. Uses the overview index,
-// so other pages don't have to be loaded in full.
-async function rerenderCards() {
-  await ensureFonts();
-  await rescanPage(figma.currentPage);
-  let count = 0;
-  for (const e of readIndex()) {
-    const node = await figma.getNodeByIdAsync(e.id);
-    if (!node || node.removed || !isValidTarget(node)) continue;
-    const data = readSpec(node);
-    if (!data || !(await findCard(node, data))) continue;
-    await upsertCard(node, data);
-    count++;
-  }
-  return count;
-}
-
 async function sendOverview() {
   await rescanPage(figma.currentPage);
   figma.ui.postMessage({ type: 'overview', entries: readIndex(), currentPageId: figma.currentPage.id });
@@ -512,6 +495,7 @@ figma.on('currentpagechange', () => pushState());
 
 const PEOPLE_KEY = 'pyde-spec-people';
 const LANG_KEY = 'pyde-spec-lang';
+const CARD_LANG_PREF = 'pyde-spec-card-lang'; // the card language this user picked last, used for new specs
 let lang = 'en';
 
 // Figma only exposes the people who have this file open right now (activeUsers), so suggestions
@@ -623,6 +607,7 @@ async function save(msg) {
     jira: cleanUrls(s.jira),
     slack: cleanUrls(s.slack),
     notes: typeof s.notes === 'string' ? s.notes : '',
+    lang: CARD_TEXT[s.lang] ? s.lang : 'en',
     by: userName(),
     at: now,
     cardId: old ? old.cardId : null,
@@ -642,6 +627,7 @@ async function save(msg) {
   registerPeople(data);
   await rememberPeople(data);
   await sendPeople();
+  await figma.clientStorage.setAsync(CARD_LANG_PREF, data.lang);
   figma.notify(t('Design spec saved', 'Design spec kaydedildi'));
 }
 
@@ -676,7 +662,8 @@ figma.ui.onmessage = async (msg) => {
     if (msg.type === 'ready') {
       const saved = await figma.clientStorage.getAsync(LANG_KEY);
       if (saved === 'en' || saved === 'tr') lang = saved;
-      figma.ui.postMessage({ type: 'prefs', lang, cardLang: cardLang() });
+      const cardLang = await figma.clientStorage.getAsync(CARD_LANG_PREF);
+      figma.ui.postMessage({ type: 'prefs', lang, cardLang: CARD_TEXT[cardLang] ? cardLang : 'en' });
       await sendPeople();
       return pushState();
     }
@@ -702,14 +689,6 @@ figma.ui.onmessage = async (msg) => {
       return sendOverview();
     }
     if (msg.type === 'goto') return goTo(msg.id);
-    if (msg.type === 'setCardLang') {
-      if (!CARD_TEXT[msg.lang] || msg.lang === cardLang()) return;
-      figma.root.setSharedPluginData(NS, CARD_LANG_KEY, msg.lang);
-      const n = await rerenderCards();
-      figma.ui.postMessage({ type: 'cardLang', cardLang: cardLang() });
-      figma.notify(t(n + ' card(s) updated', n + ' kart güncellendi'));
-      return;
-    }
     if (msg.type === 'forgetPerson') { await forgetPerson(String(msg.name)); return sendPeople(); }
   } catch (e) {
     figma.notify(t('Something went wrong: ', 'Bir hata oluştu: ') + (e && e.message ? e.message : e), { error: true });
