@@ -19,7 +19,7 @@ The card looks like a yellow sticky note; the status shows as a colored label on
 
 1. Select a section (or a frame placed directly on the page / directly inside a section) and run the plugin.
 2. Fill in the form and click **Add spec card**.
-   - For a section, the card is placed **inside** the section, to the right of the existing content. The section grows to fit it; nothing else moves.
+   - For a section, the card is placed **inside** the section, in its top-left corner (96 px from the left and top). The existing content moves down to start 96 px below the card, and the section grows to fit. When the card later gets taller or shorter, the content below it moves with it.
    - For a frame (a screen), the card is placed next to the frame, so it never looks like part of the UI.
 3. To edit later, select the section or the card and click **Edit design spec** in the right panel (or run the plugin again).
 

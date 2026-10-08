@@ -273,22 +273,36 @@ function renderCard(card, target, data) {
   put(card, text('Last updated by ' + data.by + ' · ' + fmtDate(data.at), 'regular', 11, 'tertiary', 'Last updated'), true);
 }
 
+const CARD_INSET = 96; // a section card sits this far from the section's left and top edges
+const CARD_GAP = 96;   // minimum space between the card and the content below it
+
 // Grows a section so the card fits inside it, with breathing room.
 function fitSection(section, card) {
-  const w = Math.max(section.width, card.x + card.width + 80);
-  const h = Math.max(section.height, card.y + card.height + 80);
+  const w = Math.max(section.width, card.x + card.width + CARD_INSET);
+  const h = Math.max(section.height, card.y + card.height + CARD_INSET);
   if (w !== section.width || h !== section.height) section.resizeWithoutConstraints(w, h);
+}
+
+// Moves the section's other content down (or up) by `dy` and resizes the section with it.
+function shiftContent(section, card, dy, onlyBelow) {
+  if (!dy) return;
+  for (const c of section.children) {
+    if (c.id === card.id || (onlyBelow !== undefined && c.y < onlyBelow)) continue;
+    c.y += dy;
+  }
+  section.resizeWithoutConstraints(section.width, Math.max(1, section.height + dy));
 }
 
 function placeNewCard(card, target) {
   if (target.type === 'SECTION') {
-    // Right of the existing content, top-aligned with it. Nothing else in the section moves.
+    // Top-left corner; everything else moves down so it starts CARD_GAP below the card.
+    card.x = CARD_INSET;
+    card.y = CARD_INSET;
     const others = target.children.filter((c) => c.id !== card.id);
     if (others.length) {
-      card.x = Math.max.apply(null, others.map((c) => c.x + c.width)) + 80;
-      card.y = Math.min.apply(null, others.map((c) => c.y));
-    } else {
-      card.x = 80; card.y = 80;
+      const top = Math.min.apply(null, others.map((c) => c.y));
+      const dy = card.y + card.height + CARD_GAP - top;
+      if (dy > 0) shiftContent(target, card, dy);
     }
   } else {
     card.x = target.x + target.width + 80;
@@ -307,8 +321,16 @@ async function upsertCard(target, data) {
   card.setSharedPluginData(NS, CARD_KEY, JSON.stringify({
     kind: target.type === 'SECTION' ? 'section' : 'frame', targetId: target.id
   }));
+  const oldBottom = isNew ? 0 : card.y + card.height;
   renderCard(card, target, data);
-  if (isNew) placeNewCard(card, target);
+  if (isNew) {
+    placeNewCard(card, target);
+  } else if (target.type === 'SECTION' && card.x === CARD_INSET && card.y === CARD_INSET) {
+    // The card got taller or shorter: move the content below it by the same amount,
+    // so the space between them stays as it was. Skipped if someone moved the card
+    // (or it was placed by an older version), since then it isn't above the content.
+    shiftContent(target, card, card.y + card.height - oldBottom, oldBottom);
+  }
   if (card.parent && card.parent.type === 'SECTION') fitSection(card.parent, card);
   return card;
 }
